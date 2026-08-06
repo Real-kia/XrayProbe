@@ -15,6 +15,7 @@ import (
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/input"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/remote"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	"github.com/KiaTheRandomGuy/XrayProbe/internal/version"
 )
 
 type fakeRunner struct{}
@@ -96,7 +97,7 @@ func TestServerReturnsStructuredStatus(t *testing.T) {
 	}
 	var status StatusOutput
 	decodeStructured(t, result.StructuredContent, &status)
-	if status.XrayProbe != "0.4.0" || status.CurrentCore != "latest" {
+	if status.XrayProbe != version.Value || status.CurrentCore != "latest" {
 		t.Fatalf("unexpected status: %#v", status)
 	}
 }

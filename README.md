@@ -65,6 +65,12 @@ You can either configure friendly aliases once with `--target NAME=SSH_ADDRESS` 
 
 For a remote test, a local file under `--allow-path` is transferred as content, while an HTTPS subscription URL is fetched from the remote machine. The returned outbound IP and quality metrics therefore describe the selected remote environment.
 
+Remote bootstrap installs the exact tagged XrayProbe release on the target before
+running `remote-worker`. Release archive names are lowercase by platform (for
+example, `xrayprobe_linux_amd64.tar.gz`); the installer validates the matching
+checksum before installation. If bootstrap fails, no probe result is produced;
+fix SSH/bootstrap errors before interpreting the config as failed.
+
 By default, MCP file inputs may read only files under the server’s working directory. Add one or more `--allow-path` directories for config folders. Share links, JSON/text values, and HTTPS subscription URLs can be passed directly by tools. File inputs are resolved through symlinks and limited to 10 MiB; subscription decoding is limited to 500 configs by default. Use a dedicated working directory and allow only trusted config directories.
 
 ### Codex
@@ -156,7 +162,9 @@ go vet ./...
 go run ./cmd/xrayprobe version
 ```
 
-Releases are built by GitHub Actions from version tags. See [CONTRIBUTING.md](CONTRIBUTING.md) for the release workflow.
+Releases are built by GitHub Actions from version tags. The installer regression
+check covers platform archive casing and the PowerShell checksum-field parser.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the release workflow.
 
 ## License
 

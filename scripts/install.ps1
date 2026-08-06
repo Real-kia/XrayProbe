@@ -3,16 +3,17 @@ $repo = 'KiaTheRandomGuy/XrayProbe'
 $version = if ($env:XRAYPROBE_VERSION) { $env:XRAYPROBE_VERSION } else { 'latest' }
 $installDir = if ($env:XRAYPROBE_INSTALL_DIR) { $env:XRAYPROBE_INSTALL_DIR } else { Join-Path $HOME 'bin' }
 $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'amd64' }
-$archive = "xrayprobe_Windows_$arch.tar.gz"
-$base = "https://github.com/$repo/releases/$version/download"
+$archive = "xrayprobe_windows_$arch.tar.gz"
+$base = "https://github.com/$repo/releases/download/$version"
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("xrayprobe-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
   $archivePath = Join-Path $tmp $archive
   $checksumsPath = Join-Path $tmp 'checksums.txt'
-  Invoke-WebRequest "$base/$archive" -OutFile $archivePath
-  Invoke-WebRequest "$base/checksums.txt" -OutFile $checksumsPath
-  $expected = ((Get-Content $checksumsPath | Where-Object { $_ -match [regex]::Escape($archive) }) -split 's+')[0]
+  $userAgent = "xrayprobe-installer/$version"
+  Invoke-WebRequest "$base/$archive" -UserAgent $userAgent -OutFile $archivePath
+  Invoke-WebRequest "$base/checksums.txt" -UserAgent $userAgent -OutFile $checksumsPath
+  $expected = ((Get-Content $checksumsPath | Where-Object { $_ -match [regex]::Escape($archive) }) -split '\s+')[0]
   $actual = (Get-FileHash $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $expected.ToLowerInvariant()) { throw 'checksum mismatch' }
   tar -xzf $archivePath -C $tmp

@@ -8,8 +8,8 @@ os="$(uname -s)"
 arch="$(uname -m)"
 
 case "$os" in
-  Linux) os_name="Linux" ;;
-  Darwin) os_name="Darwin" ;;
+  Linux) os_name="linux" ;;
+  Darwin) os_name="darwin" ;;
   *) echo "unsupported operating system: $os" >&2; exit 1 ;;
 esac
 case "$arch" in
@@ -19,11 +19,12 @@ case "$arch" in
 esac
 
 archive="xrayprobe_${os_name}_${arch_name}.tar.gz"
-base="https://github.com/${repo}/releases/${version}/download"
+base="https://github.com/${repo}/releases/download/${version}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-curl -fsSL "$base/$archive" -o "$tmp/$archive"
-curl -fsSL "$base/checksums.txt" -o "$tmp/checksums.txt"
+user_agent="xrayprobe-installer/$version"
+curl -fsSL -A "$user_agent" "$base/$archive" -o "$tmp/$archive"
+curl -fsSL -A "$user_agent" "$base/checksums.txt" -o "$tmp/checksums.txt"
 expected="$(awk -v name="$archive" '$2 == name {print $1}' "$tmp/checksums.txt")"
 [ -n "$expected" ] || { echo "checksum entry not found" >&2; exit 1; }
 if command -v sha256sum >/dev/null 2>&1; then

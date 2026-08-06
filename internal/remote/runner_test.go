@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/KiaTheRandomGuy/XrayProbe/internal/version"
 )
 
 func TestParseAndValidateTargets(t *testing.T) {
@@ -48,7 +50,7 @@ func TestDynamicTargetUsesDirectSSHAddress(t *testing.T) {
 
 func TestBootstrapScriptPinsCurrentRelease(t *testing.T) {
 	script := bootstrapScript()
-	if !strings.Contains(script, "XRAYPROBE_VERSION=v0.4.0") || !strings.Contains(script, "exec \"$bin\" remote-worker") {
+	if !strings.Contains(script, "XRAYPROBE_VERSION=v"+version.Value) || !strings.Contains(script, "exec \"$bin\" remote-worker") {
 		t.Fatalf("bootstrap script does not pin the worker release:\n%s", script)
 	}
 }
