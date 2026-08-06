@@ -56,13 +56,12 @@ Start it directly from a shell:
 
 ```sh
 xrayprobe mcp --allow-path /absolute/path/to/configs \
-  --target iran=root@203.0.113.10 \
-  --target germany=probe-germany
+  --allow-dynamic-targets
 ```
 
 The server communicates over stdin/stdout using MCP. Diagnostics go to stderr. Without a `target`, tests run on the MCP host. A configured target uses non-interactive SSH, automatically installs the matching XrayProbe release in the remote user’s `~/.local/bin`, and lets that remote process download/cache Xray-core. The remote host needs SSH access from the MCP host plus `sh`, `curl`, and `tar` for first-time bootstrap.
 
-Targets are configured once with `NAME=SSH_ADDRESS`; the AI then selects one by name in the tool input with `"target": "iran"`. SSH keys, `~/.ssh/config`, jump hosts, and an SSH agent continue to be managed by the operating system. XrayProbe never stores passwords or private keys. Remote targets are an explicit allowlist, and the MCP server does not accept arbitrary SSH destinations from tool calls.
+You can either configure friendly aliases once with `--target NAME=SSH_ADDRESS` or enable `--allow-dynamic-targets`. With the dynamic option, the AI can supply a direct SSH target in the tool input, such as `"target": "root@203.0.113.10"`, without changing MCP settings for each server. SSH keys, `~/.ssh/config`, jump hosts, and an SSH agent continue to be managed by the operating system. XrayProbe never stores passwords or private keys. Dynamic targets are opt-in and validated before being passed as an SSH destination.
 
 For a remote test, a local file under `--allow-path` is transferred as content, while an HTTPS subscription URL is fetched from the remote machine. The returned outbound IP and quality metrics therefore describe the selected remote environment.
 
@@ -75,8 +74,7 @@ Register the binary as a local MCP server. Use an absolute binary and config pat
 ```sh
 codex mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp \
   --allow-path /absolute/path/to/configs \
-  --target iran=root@203.0.113.10 \
-  --target germany=probe-germany
+  --allow-dynamic-targets
 ```
 
 For a binary installed on `PATH`, first resolve its path with `command -v xrayprobe` and use that absolute path in the registration command.
@@ -94,15 +92,14 @@ Add an entry to Claude Desktop’s MCP configuration, replacing the paths:
         "mcp",
         "--allow-path",
         "/absolute/path/to/configs",
-        "--target",
-        "iran=root@203.0.113.10"
+        "--allow-dynamic-targets"
       ]
     }
   }
 }
 ```
 
-The MCP server is intentionally stdio-only in this release. There is no HTTP listener or OAuth flow. Remote execution uses the configured SSH targets and a fixed XrayProbe worker command; it does not provide general remote shell access or remote config discovery.
+The MCP server is intentionally stdio-only in this release. There is no HTTP listener or OAuth flow. Remote execution uses configured SSH targets or the explicitly enabled dynamic target mode and a fixed XrayProbe worker command; it does not provide general remote shell access or remote config discovery.
 
 The first run automatically downloads and verifies the latest stable Xray-core release. Select an exact release when needed:
 

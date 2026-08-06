@@ -20,13 +20,14 @@ import (
 )
 
 type Options struct {
-	Manager        *core.Manager
-	Service        Runner
-	Remote         TargetRunner
-	RemoteTargets  []remote.Target
-	AllowedRoots   []string
-	MaxConcurrent  int
-	RequestTimeout time.Duration
+	Manager             *core.Manager
+	Service             Runner
+	Remote              TargetRunner
+	RemoteTargets       []remote.Target
+	AllowDynamicTargets bool
+	AllowedRoots        []string
+	MaxConcurrent       int
+	RequestTimeout      time.Duration
 }
 
 type Runner interface {
@@ -38,15 +39,16 @@ type TargetRunner interface {
 }
 
 type Server struct {
-	mcp            *sdk.Server
-	manager        *core.Manager
-	service        Runner
-	remote         TargetRunner
-	remoteTargets  []string
-	allowedRoots   []string
-	maxConcurrent  int
-	requestTimeout time.Duration
-	semaphore      chan struct{}
+	mcp                 *sdk.Server
+	manager             *core.Manager
+	service             Runner
+	remote              TargetRunner
+	remoteTargets       []string
+	allowDynamicTargets bool
+	allowedRoots        []string
+	maxConcurrent       int
+	requestTimeout      time.Duration
+	semaphore           chan struct{}
 }
 
 type ConfigInput struct {
@@ -104,16 +106,17 @@ type SubscriptionOutput struct {
 }
 
 type StatusOutput struct {
-	SchemaVersion  int      `json:"schema_version"`
-	XrayProbe      string   `json:"xrayprobe_version"`
-	Platform       string   `json:"platform"`
-	CurrentCore    string   `json:"current_core"`
-	InstalledCores []string `json:"installed_cores"`
-	CacheDirectory string   `json:"cache_directory"`
-	AllowedRoots   []string `json:"allowed_roots"`
-	RemoteTargets  []string `json:"remote_targets"`
-	MaxConcurrent  int      `json:"max_concurrent_tests"`
-	RequestTimeout string   `json:"request_timeout"`
+	SchemaVersion       int      `json:"schema_version"`
+	XrayProbe           string   `json:"xrayprobe_version"`
+	Platform            string   `json:"platform"`
+	CurrentCore         string   `json:"current_core"`
+	InstalledCores      []string `json:"installed_cores"`
+	CacheDirectory      string   `json:"cache_directory"`
+	AllowedRoots        []string `json:"allowed_roots"`
+	RemoteTargets       []string `json:"remote_targets"`
+	AllowDynamicTargets bool     `json:"allow_dynamic_targets"`
+	MaxConcurrent       int      `json:"max_concurrent_tests"`
+	RequestTimeout      string   `json:"request_timeout"`
 }
 
 func New(options Options) (*Server, error) {
@@ -135,8 +138,8 @@ func New(options Options) (*Server, error) {
 	}
 	remoteRunner := options.Remote
 	remoteTargetNames := make([]string, 0, len(options.RemoteTargets))
-	if remoteRunner == nil && len(options.RemoteTargets) > 0 {
-		remoteRunner, err = remote.New(options.RemoteTargets, options.RequestTimeout)
+	if remoteRunner == nil && (len(options.RemoteTargets) > 0 || options.AllowDynamicTargets) {
+		remoteRunner, err = remote.New(options.RemoteTargets, options.RequestTimeout, options.AllowDynamicTargets)
 		if err != nil {
 			return nil, err
 		}
@@ -147,26 +150,27 @@ func New(options Options) (*Server, error) {
 	sort.Strings(remoteTargetNames)
 
 	s := &Server{
-		manager:        options.Manager,
-		service:        options.Service,
-		remote:         remoteRunner,
-		remoteTargets:  remoteTargetNames,
-		allowedRoots:   roots,
-		maxConcurrent:  options.MaxConcurrent,
-		requestTimeout: options.RequestTimeout,
-		semaphore:      make(chan struct{}, options.MaxConcurrent),
+		manager:             options.Manager,
+		service:             options.Service,
+		remote:              remoteRunner,
+		remoteTargets:       remoteTargetNames,
+		allowDynamicTargets: options.AllowDynamicTargets,
+		allowedRoots:        roots,
+		maxConcurrent:       options.MaxConcurrent,
+		requestTimeout:      options.RequestTimeout,
+		semaphore:           make(chan struct{}, options.MaxConcurrent),
 	}
 	s.mcp = sdk.NewServer(&sdk.Implementation{Name: "xrayprobe", Version: version.Value}, nil)
 	sdk.AddTool(s.mcp, &sdk.Tool{
 		Name:        "test_xray_config",
 		Title:       "Test one Xray config",
-		Description: "Run one Xray share link or JSON config through Xray-core and return its outbound IP, location, latency, reliability, and quality score. Use target to select a configured remote SSH probe machine; otherwise it runs locally.",
+		Description: "Run one Xray share link or JSON config through Xray-core and return its outbound IP, location, latency, reliability, and quality score. Use target to select a configured alias or direct SSH target when dynamic targets are enabled; otherwise it runs locally.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: boolPtr(true), DestructiveHint: boolPtr(false)},
 	}, s.testConfig)
 	sdk.AddTool(s.mcp, &sdk.Tool{
 		Name:        "test_xray_subscription",
 		Title:       "Rank Xray subscription configs",
-		Description: "Decode and test a plain-text or Base64 Xray subscription, then return a compact summary, the best result, ranked working configs, and optional failures. Use target to run the batch from a configured remote SSH probe machine.",
+		Description: "Decode and test a plain-text or Base64 Xray subscription, then return a compact summary, the best result, ranked working configs, and optional failures. Use target to run the batch remotely through a configured alias or enabled direct SSH target.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: boolPtr(true), DestructiveHint: boolPtr(false)},
 	}, s.testSubscription)
 	sdk.AddTool(s.mcp, &sdk.Tool{
@@ -282,7 +286,7 @@ func (s *Server) status(ctx context.Context, _ *sdk.CallToolRequest, _ struct{})
 		return nil, StatusOutput{}, ctx.Err()
 	default:
 	}
-	return nil, StatusOutput{SchemaVersion: 1, XrayProbe: version.Value, Platform: runtime.GOOS + "/" + runtime.GOARCH, CurrentCore: current, InstalledCores: installed, CacheDirectory: s.manager.Cache, AllowedRoots: append([]string(nil), s.allowedRoots...), RemoteTargets: append([]string(nil), s.remoteTargets...), MaxConcurrent: s.maxConcurrent, RequestTimeout: s.requestTimeout.String()}, nil
+	return nil, StatusOutput{SchemaVersion: 1, XrayProbe: version.Value, Platform: runtime.GOOS + "/" + runtime.GOARCH, CurrentCore: current, InstalledCores: installed, CacheDirectory: s.manager.Cache, AllowedRoots: append([]string(nil), s.allowedRoots...), RemoteTargets: append([]string(nil), s.remoteTargets...), AllowDynamicTargets: s.allowDynamicTargets, MaxConcurrent: s.maxConcurrent, RequestTimeout: s.requestTimeout.String()}, nil
 }
 
 func (s *Server) run(ctx context.Context, target string, source input.Source, options types.RunOptions) ([]types.Result, string, string, error) {

@@ -11,7 +11,7 @@ func TestParseAndValidateTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runner, err := New(targets, time.Minute)
+	runner, err := New(targets, time.Minute, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -22,16 +22,33 @@ func TestParseAndValidateTargets(t *testing.T) {
 	for _, value := range []string{"missing-equals", "=root@host", "bad name=root@host", "local=root@host", "x=-oProxyCommand=bad"} {
 		parsed, parseErr := ParseTargets([]string{value})
 		if parseErr == nil {
-			if _, parseErr = New(parsed, time.Minute); parseErr == nil {
+			if _, parseErr = New(parsed, time.Minute, false); parseErr == nil {
 				t.Errorf("expected target %q to be rejected", value)
 			}
 		}
 	}
 }
 
+func TestDynamicTargetUsesDirectSSHAddress(t *testing.T) {
+	runner, err := New(nil, time.Minute, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := runner.target("root@192.0.2.10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Address != "root@192.0.2.10" {
+		t.Fatalf("dynamic target address = %q", target.Address)
+	}
+	if _, err := runner.target("bad target"); err == nil {
+		t.Fatal("expected whitespace in dynamic SSH target to be rejected")
+	}
+}
+
 func TestBootstrapScriptPinsCurrentRelease(t *testing.T) {
 	script := bootstrapScript()
-	if !strings.Contains(script, "XRAYPROBE_VERSION=v0.3.0") || !strings.Contains(script, "exec \"$bin\" remote-worker") {
+	if !strings.Contains(script, "XRAYPROBE_VERSION=v0.4.0") || !strings.Contains(script, "exec \"$bin\" remote-worker") {
 		t.Fatalf("bootstrap script does not pin the worker release:\n%s", script)
 	}
 }

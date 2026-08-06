@@ -70,13 +70,14 @@ func mcpCommand(manager *core.Manager, args []string) int {
 	fs.Var(&roots, "allow-path", "allow MCP file inputs from this directory; repeatable")
 	var targets stringListFlag
 	fs.Var(&targets, "target", "configure a remote probe target as NAME=SSH_ADDRESS; repeatable")
+	allowDynamicTargets := fs.Bool("allow-dynamic-targets", false, "allow MCP tool calls to supply direct SSH targets")
 	maxConcurrent := fs.Int("max-concurrent-tests", 2, "maximum concurrent MCP requests")
 	requestTimeout := fs.Duration("request-timeout", 10*time.Minute, "maximum duration of one MCP request")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 || *maxConcurrent < 1 || *requestTimeout <= 0 {
-		fmt.Fprintln(os.Stderr, "usage: xrayprobe mcp [--allow-path DIR] [--target NAME=SSH_ADDRESS] [--max-concurrent-tests N] [--request-timeout D]")
+		fmt.Fprintln(os.Stderr, "usage: xrayprobe mcp [--allow-path DIR] [--target NAME=SSH_ADDRESS] [--allow-dynamic-targets] [--max-concurrent-tests N] [--request-timeout D]")
 		return 2
 	}
 	remoteTargets, err := remote.ParseTargets(targets)
@@ -84,7 +85,7 @@ func mcpCommand(manager *core.Manager, args []string) int {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
 		return 2
 	}
-	server, err := mcpserver.New(mcpserver.Options{Manager: manager, AllowedRoots: roots, RemoteTargets: remoteTargets, MaxConcurrent: *maxConcurrent, RequestTimeout: *requestTimeout})
+	server, err := mcpserver.New(mcpserver.Options{Manager: manager, AllowedRoots: roots, RemoteTargets: remoteTargets, AllowDynamicTargets: *allowDynamicTargets, MaxConcurrent: *maxConcurrent, RequestTimeout: *requestTimeout})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
 		return 3
@@ -325,6 +326,7 @@ current working directory unless one or more --allow-path directories are set.
 Options:
   --allow-path DIR             Allow MCP file inputs under DIR (repeatable)
   --target NAME=SSH_ADDRESS    Configure a remote probe target (repeatable)
+  --allow-dynamic-targets      Allow tool calls to supply direct SSH targets
   --max-concurrent-tests N     Maximum concurrent MCP requests (default: 2)
   --request-timeout D          Maximum duration of one MCP request (default: 10m)
 `)

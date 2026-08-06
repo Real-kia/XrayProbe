@@ -27,8 +27,9 @@ type Target struct {
 }
 
 type Runner struct {
-	targets map[string]Target
-	timeout time.Duration
+	targets      map[string]Target
+	timeout      time.Duration
+	allowDynamic bool
 }
 
 type WorkerRequest struct {
@@ -42,22 +43,16 @@ type WorkerResponse struct {
 	Error       string         `json:"error,omitempty"`
 }
 
-func New(targets []Target, timeout time.Duration) (*Runner, error) {
+func New(targets []Target, timeout time.Duration, allowDynamic bool) (*Runner, error) {
 	if timeout <= 0 {
 		timeout = defaultRequestTimeout
 	}
-	result := &Runner{targets: make(map[string]Target, len(targets)), timeout: timeout}
+	result := &Runner{targets: make(map[string]Target, len(targets)), timeout: timeout, allowDynamic: allowDynamic}
 	for _, target := range targets {
 		name := strings.TrimSpace(target.Name)
 		address := strings.TrimSpace(target.Address)
-		if !validName(name) {
-			return nil, fmt.Errorf("remote target name %q is invalid", target.Name)
-		}
-		if name == "local" {
-			return nil, errors.New("remote target name local is reserved")
-		}
-		if address == "" || strings.HasPrefix(address, "-") || strings.IndexFunc(address, func(r rune) bool { return r <= ' ' }) >= 0 {
-			return nil, fmt.Errorf("remote target %q has an invalid SSH address", name)
+		if err := validateTarget(name, address); err != nil {
+			return nil, err
 		}
 		if _, exists := result.targets[name]; exists {
 			return nil, fmt.Errorf("remote target %q is configured more than once", name)
@@ -95,9 +90,9 @@ func (r *Runner) Run(ctx context.Context, name string, source input.Source, opti
 	if r == nil {
 		return nil, "", errors.New("remote runner is not configured")
 	}
-	target, ok := r.targets[name]
-	if !ok {
-		return nil, "", fmt.Errorf("remote target %q is not configured", name)
+	target, err := r.target(name)
+	if err != nil {
+		return nil, "", err
 	}
 	options.AllowedRoots = nil
 	options.RestrictPaths = false
@@ -134,6 +129,19 @@ func (r *Runner) Run(ctx context.Context, name string, source input.Source, opti
 	return response.Results, response.CoreVersion, nil
 }
 
+func (r *Runner) target(name string) (Target, error) {
+	if target, ok := r.targets[name]; ok {
+		return target, nil
+	}
+	if !r.allowDynamic {
+		return Target{}, fmt.Errorf("remote target %q is not configured; enable --allow-dynamic-targets or configure --target NAME=SSH_ADDRESS", name)
+	}
+	if err := validateAddress(name); err != nil {
+		return Target{}, fmt.Errorf("dynamic remote target %q: %w", name, err)
+	}
+	return Target{Name: name, Address: name}, nil
+}
+
 func bootstrapScript() string {
 	release := "v" + version.Value
 	return fmt.Sprintf(`set -eu
@@ -163,6 +171,26 @@ func validName(value string) bool {
 		}
 	}
 	return true
+}
+
+func validateTarget(name, address string) error {
+	if !validName(name) {
+		return fmt.Errorf("remote target name %q is invalid", name)
+	}
+	if name == "local" {
+		return errors.New("remote target name local is reserved")
+	}
+	if err := validateAddress(address); err != nil {
+		return fmt.Errorf("remote target %q: %w", name, err)
+	}
+	return nil
+}
+
+func validateAddress(address string) error {
+	if address == "" || strings.HasPrefix(address, "-") || strings.IndexFunc(address, func(r rune) bool { return r <= ' ' }) >= 0 {
+		return errors.New("invalid SSH address")
+	}
+	return nil
 }
 
 type limitedBuffer struct {
