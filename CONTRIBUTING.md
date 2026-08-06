@@ -1,6 +1,6 @@
 # Contributing
 
-1. Run `go test ./...` and `go vet ./...` before opening a pull request.
+1. Use Go 1.25 or newer, then run `go test ./...` and `go vet ./...` before opening a pull request.
 2. Do not add real share links, credentials, subscription URLs, or private endpoints to fixtures.
 3. Keep temporary files, network clients, and child processes bounded by context cancellation.
 4. New output fields should be added compatibly to the versioned JSON result schema.

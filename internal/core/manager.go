@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,10 +26,12 @@ const (
 )
 
 type Manager struct {
-	HTTP    *http.Client
-	Repo    string
-	Cache   string
-	BaseURL string
+	HTTP     *http.Client
+	Repo     string
+	Cache    string
+	BaseURL  string
+	ensureMu sync.Mutex
+	stateMu  sync.RWMutex
 }
 
 type Release struct {
@@ -62,6 +65,8 @@ func (m *Manager) currentFile() string {
 }
 
 func (m *Manager) Current() (string, error) {
+	m.stateMu.RLock()
+	defer m.stateMu.RUnlock()
 	b, err := os.ReadFile(m.currentFile())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -77,6 +82,8 @@ func (m *Manager) Current() (string, error) {
 }
 
 func (m *Manager) SetCurrent(version string) error {
+	m.stateMu.Lock()
+	defer m.stateMu.Unlock()
 	if version == "" {
 		return errors.New("core version cannot be empty")
 	}
@@ -135,6 +142,8 @@ func (m *Manager) Resolve(ctx context.Context, requested string) (Release, error
 }
 
 func (m *Manager) Ensure(ctx context.Context, requested string) (string, string, error) {
+	m.ensureMu.Lock()
+	defer m.ensureMu.Unlock()
 	if requested == "" {
 		requested, _ = m.Current()
 	}

@@ -24,6 +24,7 @@ type ProbeOptions struct {
 
 type Result struct {
 	Index      int           `json:"index"`
+	ConfigID   string        `json:"config_id"`
 	Name       string        `json:"name"`
 	Protocol   string        `json:"protocol,omitempty"`
 	Transport  string        `json:"transport,omitempty"`
@@ -59,9 +60,12 @@ type Metrics struct {
 }
 
 type RunOptions struct {
-	CoreVersion string
-	OutboundTag string
-	Concurrency int
-	MaxConfigs  int
-	Probe       ProbeOptions
+	SourceKind    string
+	AllowedRoots  []string
+	RestrictPaths bool
+	CoreVersion   string
+	OutboundTag   string
+	Concurrency   int
+	MaxConfigs    int
+	Probe         ProbeOptions
 }

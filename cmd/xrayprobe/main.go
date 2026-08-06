@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/core"
+	"github.com/KiaTheRandomGuy/XrayProbe/internal/mcpserver"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/output"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/tester"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	versioninfo "github.com/KiaTheRandomGuy/XrayProbe/internal/version"
 )
 
-const version = "0.1.0"
+const version = versioninfo.Value
 
 func main() { os.Exit(run(os.Args[1:])) }
 
@@ -41,11 +44,45 @@ func run(args []string) int {
 		return testCommand(manager, args[1:])
 	case "core":
 		return coreCommand(manager, args[1:])
+	case "mcp":
+		return mcpCommand(manager, args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "xrayprobe: unknown command %q\n\n", args[0])
 		usage(os.Stderr)
 		return 2
 	}
+}
+
+func mcpCommand(manager *core.Manager, args []string) int {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			mcpUsage(os.Stdout)
+			return 0
+		}
+	}
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var roots stringListFlag
+	fs.Var(&roots, "allow-path", "allow MCP file inputs from this directory; repeatable")
+	maxConcurrent := fs.Int("max-concurrent-tests", 2, "maximum concurrent MCP requests")
+	requestTimeout := fs.Duration("request-timeout", 10*time.Minute, "maximum duration of one MCP request")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 || *maxConcurrent < 1 || *requestTimeout <= 0 {
+		fmt.Fprintln(os.Stderr, "usage: xrayprobe mcp [--allow-path DIR] [--max-concurrent-tests N] [--request-timeout D]")
+		return 2
+	}
+	server, err := mcpserver.New(mcpserver.Options{Manager: manager, AllowedRoots: roots, MaxConcurrent: *maxConcurrent, RequestTimeout: *requestTimeout})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
+		return 3
+	}
+	if err := server.Run(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
+		return 3
+	}
+	return 0
 }
 
 func testCommand(manager *core.Manager, args []string) int {
@@ -209,6 +246,7 @@ Usage:
   xrayprobe core use <VERSION>
   xrayprobe core list [--remote]
   xrayprobe core current
+  xrayprobe mcp [options]
   xrayprobe version
 
 Examples:
@@ -218,6 +256,7 @@ Examples:
   xrayprobe core install v26.3.27
 
 Use "xrayprobe test --help" for test options.
+Use "xrayprobe mcp --help" for MCP server options.
 `)
 }
 
@@ -240,4 +279,30 @@ Options:
   --speed                       Run an opt-in download sample
   --download-size BYTES         Bytes for --speed (default: 10485760)
 `)
+}
+
+func mcpUsage(w io.Writer) {
+	_, _ = fmt.Fprint(w, `Usage:
+  xrayprobe mcp [options]
+
+Run the local stdio MCP server for AI clients. File inputs are limited to the
+current working directory unless one or more --allow-path directories are set.
+
+Options:
+  --allow-path DIR             Allow MCP file inputs under DIR (repeatable)
+  --max-concurrent-tests N     Maximum concurrent MCP requests (default: 2)
+  --request-timeout D          Maximum duration of one MCP request (default: 10m)
+`)
+}
+
+type stringListFlag []string
+
+func (f *stringListFlag) String() string { return strings.Join(*f, ",") }
+
+func (f *stringListFlag) Set(value string) error {
+	if strings.TrimSpace(value) == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	*f = append(*f, value)
+	return nil
 }

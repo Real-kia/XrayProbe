@@ -44,6 +44,55 @@ Test and rank a plain-text or Base64 subscription:
 xrayprobe test https://example.com/subscription.txt --concurrency 4
 ```
 
+## MCP server for AI clients
+
+XrayProbe includes a local stdio [Model Context Protocol](https://modelcontextprotocol.io/) server. An AI client can call the tools without learning the CLI flags:
+
+* `test_xray_config` tests one share link or JSON config.
+* `test_xray_subscription` tests a subscription and returns a summary, the best config, the top working results, and compact failures.
+* `get_xrayprobe_status` reports the XrayProbe/core cache and server limits.
+
+Start it directly from a shell:
+
+```sh
+xrayprobe mcp --allow-path /absolute/path/to/configs
+```
+
+The server communicates only over stdin/stdout using MCP. Diagnostics go to stderr. It runs Xray-core and network probes from the same machine where the MCP server is installed; it does not SSH to or discover servers. Xray-core is downloaded and cached automatically on the first test.
+
+By default, MCP file inputs may read only files under the server’s working directory. Add one or more `--allow-path` directories for config folders. Share links, JSON/text values, and HTTPS subscription URLs can be passed directly by tools. File inputs are resolved through symlinks and limited to 10 MiB; subscription decoding is limited to 500 configs by default. Use a dedicated working directory and allow only trusted config directories.
+
+### Codex
+
+Register the binary as a local MCP server. Use an absolute binary and config path:
+
+```sh
+codex mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp --allow-path /absolute/path/to/configs
+```
+
+For a binary installed on `PATH`, first resolve its path with `command -v xrayprobe` and use that absolute path in the registration command.
+
+### Claude Desktop
+
+Add an entry to Claude Desktop’s MCP configuration, replacing the paths:
+
+```json
+{
+  "mcpServers": {
+    "xrayprobe": {
+      "command": "/absolute/path/to/xrayprobe",
+      "args": [
+        "mcp",
+        "--allow-path",
+        "/absolute/path/to/configs"
+      ]
+    }
+  }
+}
+```
+
+The MCP server is intentionally local and stdio-only in this release. There is no HTTP listener, OAuth flow, SSH integration, or remote config discovery.
+
 The first run automatically downloads and verifies the latest stable Xray-core release. Select an exact release when needed:
 
 ```sh
@@ -93,6 +142,7 @@ The first release parses VLESS, VMess, Trojan, and Shadowsocks links with common
 ## Development
 
 ```sh
+go version # Go 1.25 or newer
 go test ./...
 go vet ./...
 go run ./cmd/xrayprobe version
