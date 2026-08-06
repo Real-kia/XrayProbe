@@ -38,6 +38,10 @@ func Load(ctx context.Context, source string, maxConfigs int) ([]types.Spec, err
 	return LoadSource(ctx, Source{Value: source, Kind: "auto"}, LoadOptions{MaxConfigs: maxConfigs})
 }
 
+func ReadFile(path string, options LoadOptions) ([]byte, error) {
+	return readPath(path, options)
+}
+
 func LoadSource(ctx context.Context, source Source, options LoadOptions) ([]types.Spec, error) {
 	maxConfigs := options.MaxConfigs
 	if maxConfigs <= 0 {

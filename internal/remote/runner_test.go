@@ -1,0 +1,37 @@
+package remote
+
+import (
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestParseAndValidateTargets(t *testing.T) {
+	targets, err := ParseTargets([]string{"iran=root@192.0.2.10", "de=probe-de"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner, err := New(targets, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(runner.Names(), ","); got != "de,iran" {
+		t.Fatalf("target names = %q", got)
+	}
+
+	for _, value := range []string{"missing-equals", "=root@host", "bad name=root@host", "local=root@host", "x=-oProxyCommand=bad"} {
+		parsed, parseErr := ParseTargets([]string{value})
+		if parseErr == nil {
+			if _, parseErr = New(parsed, time.Minute); parseErr == nil {
+				t.Errorf("expected target %q to be rejected", value)
+			}
+		}
+	}
+}
+
+func TestBootstrapScriptPinsCurrentRelease(t *testing.T) {
+	script := bootstrapScript()
+	if !strings.Contains(script, "XRAYPROBE_VERSION=v0.3.0") || !strings.Contains(script, "exec \"$bin\" remote-worker") {
+		t.Fatalf("bootstrap script does not pin the worker release:\n%s", script)
+	}
+}

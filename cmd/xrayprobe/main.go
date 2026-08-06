@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/core"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/mcpserver"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/output"
+	"github.com/KiaTheRandomGuy/XrayProbe/internal/remote"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/tester"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
 	versioninfo "github.com/KiaTheRandomGuy/XrayProbe/internal/version"
@@ -46,6 +48,8 @@ func run(args []string) int {
 		return coreCommand(manager, args[1:])
 	case "mcp":
 		return mcpCommand(manager, args[1:])
+	case "remote-worker":
+		return remoteWorkerCommand(manager, args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "xrayprobe: unknown command %q\n\n", args[0])
 		usage(os.Stderr)
@@ -64,22 +68,52 @@ func mcpCommand(manager *core.Manager, args []string) int {
 	fs.SetOutput(io.Discard)
 	var roots stringListFlag
 	fs.Var(&roots, "allow-path", "allow MCP file inputs from this directory; repeatable")
+	var targets stringListFlag
+	fs.Var(&targets, "target", "configure a remote probe target as NAME=SSH_ADDRESS; repeatable")
 	maxConcurrent := fs.Int("max-concurrent-tests", 2, "maximum concurrent MCP requests")
 	requestTimeout := fs.Duration("request-timeout", 10*time.Minute, "maximum duration of one MCP request")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() != 0 || *maxConcurrent < 1 || *requestTimeout <= 0 {
-		fmt.Fprintln(os.Stderr, "usage: xrayprobe mcp [--allow-path DIR] [--max-concurrent-tests N] [--request-timeout D]")
+		fmt.Fprintln(os.Stderr, "usage: xrayprobe mcp [--allow-path DIR] [--target NAME=SSH_ADDRESS] [--max-concurrent-tests N] [--request-timeout D]")
 		return 2
 	}
-	server, err := mcpserver.New(mcpserver.Options{Manager: manager, AllowedRoots: roots, MaxConcurrent: *maxConcurrent, RequestTimeout: *requestTimeout})
+	remoteTargets, err := remote.ParseTargets(targets)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
+		return 2
+	}
+	server, err := mcpserver.New(mcpserver.Options{Manager: manager, AllowedRoots: roots, RemoteTargets: remoteTargets, MaxConcurrent: *maxConcurrent, RequestTimeout: *requestTimeout})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
 		return 3
 	}
 	if err := server.Run(context.Background()); err != nil {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
+		return 3
+	}
+	return 0
+}
+
+func remoteWorkerCommand(manager *core.Manager, args []string) int {
+	if len(args) != 0 {
+		return 2
+	}
+	var request remote.WorkerRequest
+	response := remote.WorkerResponse{}
+	if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
+		response.Error = fmt.Sprintf("decode remote test request: %v", err)
+		_ = json.NewEncoder(os.Stdout).Encode(response)
+		return 0
+	}
+	results, coreVersion, err := tester.NewService(manager).Run(context.Background(), request.Source, request.Options)
+	response.Results = results
+	response.CoreVersion = coreVersion
+	if err != nil {
+		response.Error = err.Error()
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(response); err != nil {
 		return 3
 	}
 	return 0
@@ -290,6 +324,7 @@ current working directory unless one or more --allow-path directories are set.
 
 Options:
   --allow-path DIR             Allow MCP file inputs under DIR (repeatable)
+  --target NAME=SSH_ADDRESS    Configure a remote probe target (repeatable)
   --max-concurrent-tests N     Maximum concurrent MCP requests (default: 2)
   --request-timeout D          Maximum duration of one MCP request (default: 10m)
 `)

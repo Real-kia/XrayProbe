@@ -48,17 +48,23 @@ xrayprobe test https://example.com/subscription.txt --concurrency 4
 
 XrayProbe includes a local stdio [Model Context Protocol](https://modelcontextprotocol.io/) server. An AI client can call the tools without learning the CLI flags:
 
-* `test_xray_config` tests one share link or JSON config.
-* `test_xray_subscription` tests a subscription and returns a summary, the best config, the top working results, and compact failures.
+* `test_xray_config` tests one share link or JSON config locally or from a configured remote SSH target.
+* `test_xray_subscription` tests a subscription and returns a summary, the best config, the top working results, and compact failures, locally or remotely.
 * `get_xrayprobe_status` reports the XrayProbe/core cache and server limits.
 
 Start it directly from a shell:
 
 ```sh
-xrayprobe mcp --allow-path /absolute/path/to/configs
+xrayprobe mcp --allow-path /absolute/path/to/configs \
+  --target iran=root@203.0.113.10 \
+  --target germany=probe-germany
 ```
 
-The server communicates only over stdin/stdout using MCP. Diagnostics go to stderr. It runs Xray-core and network probes from the same machine where the MCP server is installed; it does not SSH to or discover servers. Xray-core is downloaded and cached automatically on the first test.
+The server communicates over stdin/stdout using MCP. Diagnostics go to stderr. Without a `target`, tests run on the MCP host. A configured target uses non-interactive SSH, automatically installs the matching XrayProbe release in the remote user’s `~/.local/bin`, and lets that remote process download/cache Xray-core. The remote host needs SSH access from the MCP host plus `sh`, `curl`, and `tar` for first-time bootstrap.
+
+Targets are configured once with `NAME=SSH_ADDRESS`; the AI then selects one by name in the tool input with `"target": "iran"`. SSH keys, `~/.ssh/config`, jump hosts, and an SSH agent continue to be managed by the operating system. XrayProbe never stores passwords or private keys. Remote targets are an explicit allowlist, and the MCP server does not accept arbitrary SSH destinations from tool calls.
+
+For a remote test, a local file under `--allow-path` is transferred as content, while an HTTPS subscription URL is fetched from the remote machine. The returned outbound IP and quality metrics therefore describe the selected remote environment.
 
 By default, MCP file inputs may read only files under the server’s working directory. Add one or more `--allow-path` directories for config folders. Share links, JSON/text values, and HTTPS subscription URLs can be passed directly by tools. File inputs are resolved through symlinks and limited to 10 MiB; subscription decoding is limited to 500 configs by default. Use a dedicated working directory and allow only trusted config directories.
 
@@ -67,7 +73,10 @@ By default, MCP file inputs may read only files under the server’s working dir
 Register the binary as a local MCP server. Use an absolute binary and config path:
 
 ```sh
-codex mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp --allow-path /absolute/path/to/configs
+codex mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp \
+  --allow-path /absolute/path/to/configs \
+  --target iran=root@203.0.113.10 \
+  --target germany=probe-germany
 ```
 
 For a binary installed on `PATH`, first resolve its path with `command -v xrayprobe` and use that absolute path in the registration command.
@@ -84,14 +93,16 @@ Add an entry to Claude Desktop’s MCP configuration, replacing the paths:
       "args": [
         "mcp",
         "--allow-path",
-        "/absolute/path/to/configs"
+        "/absolute/path/to/configs",
+        "--target",
+        "iran=root@203.0.113.10"
       ]
     }
   }
 }
 ```
 
-The MCP server is intentionally local and stdio-only in this release. There is no HTTP listener, OAuth flow, SSH integration, or remote config discovery.
+The MCP server is intentionally stdio-only in this release. There is no HTTP listener or OAuth flow. Remote execution uses the configured SSH targets and a fixed XrayProbe worker command; it does not provide general remote shell access or remote config discovery.
 
 The first run automatically downloads and verifies the latest stable Xray-core release. Select an exact release when needed:
 

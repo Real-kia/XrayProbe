@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"reflect"
 	"sort"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/core"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/input"
+	"github.com/KiaTheRandomGuy/XrayProbe/internal/remote"
 	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
 )
 
@@ -26,6 +28,17 @@ func (fakeRunner) Run(_ context.Context, source input.Source, _ types.RunOptions
 		{Index: 1, ConfigID: "cfg_best", Name: "best", Core: "v26.3.27", Status: "ok", Score: 95},
 		{Index: 2, ConfigID: "cfg_bad", Name: "bad", Core: "v26.3.27", Status: "failed", Error: "probe failed"},
 	}, "v26.3.27", nil
+}
+
+type fakeTargetRunner struct {
+	source  input.Source
+	options types.RunOptions
+}
+
+func (f *fakeTargetRunner) Run(_ context.Context, _ string, source input.Source, options types.RunOptions) ([]types.Result, string, error) {
+	f.source = source
+	f.options = options
+	return []types.Result{{Index: 0, ConfigID: "cfg_remote", Name: "remote", Core: "v26.3.27", Status: "ok", Score: 91}}, "v26.3.27", nil
 }
 
 func connectTestServer(t *testing.T) (*sdk.ClientSession, func()) {
@@ -83,7 +96,7 @@ func TestServerReturnsStructuredStatus(t *testing.T) {
 	}
 	var status StatusOutput
 	decodeStructured(t, result.StructuredContent, &status)
-	if status.XrayProbe != "0.2.1" || status.CurrentCore != "latest" {
+	if status.XrayProbe != "0.3.0" || status.CurrentCore != "latest" {
 		t.Fatalf("unexpected status: %#v", status)
 	}
 }
@@ -124,6 +137,35 @@ func TestServerReturnsConfigAndRankedSubscription(t *testing.T) {
 	}
 	if batch.Summary.Total != 3 || batch.Summary.Succeeded != 2 || batch.Summary.Failed != 1 || len(batch.Failures) != 1 || !batch.Truncated {
 		t.Fatalf("unexpected batch summary: %#v", batch)
+	}
+}
+
+func TestServerMaterializesLocalFileForRemoteTarget(t *testing.T) {
+	root := t.TempDir()
+	path := root + "/config.txt"
+	if err := os.WriteFile(path, []byte("vless://remote@example.com:443"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fakeRemote := &fakeTargetRunner{}
+	server, err := New(Options{
+		Manager:       &core.Manager{Cache: t.TempDir()},
+		Service:       fakeRunner{},
+		Remote:        fakeRemote,
+		RemoteTargets: []remote.Target{{Name: "probe", Address: "root@example.com"}},
+		AllowedRoots:  []string{root},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	results, coreVersion, target, err := server.run(context.Background(), "probe", input.Source{Value: path, Kind: "path"}, types.RunOptions{RestrictPaths: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target != "probe" || coreVersion != "v26.3.27" || len(results) != 1 || results[0].ConfigID != "cfg_remote" {
+		t.Fatalf("unexpected remote result: target=%q core=%q results=%#v", target, coreVersion, results)
+	}
+	if fakeRemote.source.Kind != "text" || fakeRemote.source.Value != "vless://remote@example.com:443" || fakeRemote.options.RestrictPaths {
+		t.Fatalf("remote source/options were not materialized safely: source=%#v options=%#v", fakeRemote.source, fakeRemote.options)
 	}
 }
 
