@@ -1,8 +1,12 @@
 package core
 
 import (
+	"context"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -32,4 +36,27 @@ func TestSetAndCurrent(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "cores", "default-core")); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestListAcceptsCurrentSizedReleaseMetadata(t *testing.T) {
+	body := "[" + strings.Repeat(" ", 8<<20) + `{"tag_name":"v26.3.27","assets":[]}]`
+	m := &Manager{
+		HTTP: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), Request: req}, nil
+		})},
+		Repo: "XTLS/Xray-core", BaseURL: "https://api.example.test",
+	}
+	releases, err := m.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(releases) != 1 || releases[0].TagName != "v26.3.27" {
+		t.Fatalf("unexpected releases: %#v", releases)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	defaultRepo   = "XTLS/Xray-core"
-	latestVersion = "latest"
+	defaultRepo         = "XTLS/Xray-core"
+	latestVersion       = "latest"
+	maxReleaseListBytes = 32 << 20
 )
 
 type Manager struct {
@@ -113,7 +114,7 @@ func (m *Manager) List(ctx context.Context) ([]Release, error) {
 		return nil, fmt.Errorf("GitHub release API returned %s", resp.Status)
 	}
 	var releases []Release
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&releases); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxReleaseListBytes)).Decode(&releases); err != nil {
 		return nil, err
 	}
 	return releases, nil

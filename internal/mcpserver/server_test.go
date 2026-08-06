@@ -83,7 +83,7 @@ func TestServerReturnsStructuredStatus(t *testing.T) {
 	}
 	var status StatusOutput
 	decodeStructured(t, result.StructuredContent, &status)
-	if status.XrayProbe != "0.2.0" || status.CurrentCore != "latest" {
+	if status.XrayProbe != "0.2.1" || status.CurrentCore != "latest" {
 		t.Fatalf("unexpected status: %#v", status)
 	}
 }
