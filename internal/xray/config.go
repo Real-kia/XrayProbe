@@ -18,9 +18,9 @@ type Metadata struct {
 	Security  string
 }
 
-func Build(spec types.Spec, port int, requestedOutbound string) ([]byte, Metadata, error) {
+func Build(spec types.Spec, port int, requestedOutbound, networkInterface string) ([]byte, Metadata, error) {
 	if spec.Kind == "json" {
-		return buildJSON(spec.Config, port, requestedOutbound)
+		return buildJSON(spec.Config, port, requestedOutbound, networkInterface)
 	}
 	u, err := url.Parse(spec.URI)
 	if err != nil {
@@ -44,12 +44,13 @@ func Build(spec types.Spec, port int, requestedOutbound string) ([]byte, Metadat
 		return nil, Metadata{}, err
 	}
 	outbound["tag"] = "xrayprobe-target"
+	applyInterface(outbound, networkInterface)
 	config := baseConfig(port, outbound)
 	b, err := json.MarshalIndent(config, "", "  ")
 	return b, metadataFrom(outbound, protocol), err
 }
 
-func buildJSON(input map[string]any, port int, requested string) ([]byte, Metadata, error) {
+func buildJSON(input map[string]any, port int, requested, networkInterface string) ([]byte, Metadata, error) {
 	if input == nil {
 		return nil, Metadata{}, errors.New("JSON config is empty")
 	}
@@ -83,6 +84,7 @@ func buildJSON(input map[string]any, port int, requested string) ([]byte, Metada
 		tag = "xrayprobe-target"
 		selected["tag"] = tag
 	}
+	applyInterface(selected, networkInterface)
 	inboundTag := fmt.Sprintf("xrayprobe-inbound-%d", port)
 	inbounds, _ := input["inbounds"].([]any)
 	inbounds = append(inbounds, map[string]any{
@@ -101,6 +103,24 @@ func buildJSON(input map[string]any, port int, requested string) ([]byte, Metada
 	b, err := json.MarshalIndent(input, "", "  ")
 	protocol, _ := selected["protocol"].(string)
 	return b, metadataFrom(selected, protocol), err
+}
+
+func applyInterface(outbound map[string]any, networkInterface string) {
+	networkInterface = strings.TrimSpace(networkInterface)
+	if networkInterface == "" {
+		return
+	}
+	streamSettings, _ := outbound["streamSettings"].(map[string]any)
+	if streamSettings == nil {
+		streamSettings = map[string]any{}
+		outbound["streamSettings"] = streamSettings
+	}
+	sockopt, _ := streamSettings["sockopt"].(map[string]any)
+	if sockopt == nil {
+		sockopt = map[string]any{}
+		streamSettings["sockopt"] = sockopt
+	}
+	sockopt["interface"] = networkInterface
 }
 
 func baseConfig(port int, outbound map[string]any) map[string]any {

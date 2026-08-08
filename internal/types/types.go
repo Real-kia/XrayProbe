@@ -65,6 +65,7 @@ type RunOptions struct {
 	RestrictPaths bool
 	CoreVersion   string
 	OutboundTag   string
+	Interface     string
 	Concurrency   int
 	MaxConfigs    int
 	Probe         ProbeOptions

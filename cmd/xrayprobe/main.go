@@ -70,6 +70,7 @@ func mcpCommand(manager *core.Manager, args []string) int {
 	fs.Var(&roots, "allow-path", "allow MCP file inputs from this directory; repeatable")
 	var targets stringListFlag
 	fs.Var(&targets, "target", "configure a remote probe target as NAME=SSH_ADDRESS; repeatable")
+	networkInterface := fs.String("interface", "", "bind local Xray outbound connections to this network interface")
 	allowDynamicTargets := fs.Bool("allow-dynamic-targets", false, "allow MCP tool calls to supply direct SSH targets")
 	maxConcurrent := fs.Int("max-concurrent-tests", 2, "maximum concurrent MCP requests")
 	requestTimeout := fs.Duration("request-timeout", 10*time.Minute, "maximum duration of one MCP request")
@@ -85,7 +86,7 @@ func mcpCommand(manager *core.Manager, args []string) int {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
 		return 2
 	}
-	server, err := mcpserver.New(mcpserver.Options{Manager: manager, AllowedRoots: roots, RemoteTargets: remoteTargets, AllowDynamicTargets: *allowDynamicTargets, MaxConcurrent: *maxConcurrent, RequestTimeout: *requestTimeout})
+	server, err := mcpserver.New(mcpserver.Options{Manager: manager, AllowedRoots: roots, RemoteTargets: remoteTargets, AllowDynamicTargets: *allowDynamicTargets, DefaultInterface: *networkInterface, MaxConcurrent: *maxConcurrent, RequestTimeout: *requestTimeout})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
 		return 3
@@ -131,6 +132,7 @@ func testCommand(manager *core.Manager, args []string) int {
 	fs.SetOutput(io.Discard)
 	coreVersion := fs.String("core-version", "", "Xray-core version or latest")
 	outbound := fs.String("outbound", "", "JSON outbound tag")
+	networkInterface := fs.String("interface", "", "bind Xray outbound connections to this network interface")
 	concurrency := fs.Int("concurrency", 4, "maximum concurrent subscription tests")
 	maxConfigs := fs.Int("max-configs", 500, "maximum subscription configs")
 	attempts := fs.Int("attempts", 5, "probe attempts per config")
@@ -153,7 +155,7 @@ func testCommand(manager *core.Manager, args []string) int {
 		fmt.Fprintln(os.Stderr, "concurrency, attempts, and max-configs must be positive")
 		return 2
 	}
-	runOptions := types.RunOptions{CoreVersion: *coreVersion, OutboundTag: *outbound, Concurrency: *concurrency, MaxConfigs: *maxConfigs, Probe: types.ProbeOptions{Attempts: *attempts, Timeout: *timeout, ProbeURL: *probeURL, MetadataURL: *metadataURL, NoMetadata: *noMetadata, Speed: *speed, DownloadBytes: *downloadBytes}}
+	runOptions := types.RunOptions{CoreVersion: *coreVersion, OutboundTag: *outbound, Interface: *networkInterface, Concurrency: *concurrency, MaxConfigs: *maxConfigs, Probe: types.ProbeOptions{Attempts: *attempts, Timeout: *timeout, ProbeURL: *probeURL, MetadataURL: *metadataURL, NoMetadata: *noMetadata, Speed: *speed, DownloadBytes: *downloadBytes}}
 	results, _, err := tester.Run(context.Background(), manager, fs.Arg(0), runOptions)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
@@ -302,6 +304,7 @@ func testUsage(w io.Writer) {
 Options:
   --core-version latest|vX.Y.Z  Select the Xray-core release
   --outbound TAG                Select a JSON outbound explicitly
+  --interface NAME              Bind Xray outbound connections to this interface
   --attempts N                  Probe attempts per config (default: 5)
   --timeout 10s                 Timeout for each probe request
   --concurrency N               Subscription workers (default: 4)
@@ -326,6 +329,7 @@ current working directory unless one or more --allow-path directories are set.
 Options:
   --allow-path DIR             Allow MCP file inputs under DIR (repeatable)
   --target NAME=SSH_ADDRESS    Configure a remote probe target (repeatable)
+  --interface NAME              Bind local Xray outbound connections to this interface
   --allow-dynamic-targets      Allow tool calls to supply direct SSH targets
   --max-concurrent-tests N     Maximum concurrent MCP requests (default: 2)
   --request-timeout D          Maximum duration of one MCP request (default: 10m)

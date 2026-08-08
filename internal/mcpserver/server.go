@@ -26,6 +26,7 @@ type Options struct {
 	RemoteTargets       []remote.Target
 	AllowDynamicTargets bool
 	AllowedRoots        []string
+	DefaultInterface    string
 	MaxConcurrent       int
 	RequestTimeout      time.Duration
 }
@@ -46,6 +47,7 @@ type Server struct {
 	remoteTargets       []string
 	allowDynamicTargets bool
 	allowedRoots        []string
+	defaultInterface    string
 	maxConcurrent       int
 	requestTimeout      time.Duration
 	semaphore           chan struct{}
@@ -56,6 +58,7 @@ type ConfigInput struct {
 	SourceType      string `json:"source_type,omitempty" jsonschema:"auto, uri, json, path, url, or text; defaults to auto"`
 	CoreVersion     string `json:"core_version,omitempty" jsonschema:"optional Xray-core version such as v26.3.27; latest is used by default"`
 	OutboundTag     string `json:"outbound_tag,omitempty" jsonschema:"optional outbound tag for a JSON config with multiple outbounds"`
+	Interface       string `json:"interface,omitempty" jsonschema:"optional network-interface name for local Xray outbound connections; overrides the MCP default"`
 	Attempts        int    `json:"attempts,omitempty" jsonschema:"number of HTTPS probe attempts from 1 to 20; default 5"`
 	TimeoutSeconds  int    `json:"timeout_seconds,omitempty" jsonschema:"timeout for each probe request from 1 to 120 seconds; default 10"`
 	IncludeMetadata *bool  `json:"include_metadata,omitempty" jsonschema:"whether to look up outbound IP, country, and ASN; default true"`
@@ -117,6 +120,7 @@ type StatusOutput struct {
 	AllowDynamicTargets bool     `json:"allow_dynamic_targets"`
 	MaxConcurrent       int      `json:"max_concurrent_tests"`
 	RequestTimeout      string   `json:"request_timeout"`
+	DefaultInterface    string   `json:"default_interface,omitempty"`
 }
 
 func New(options Options) (*Server, error) {
@@ -156,6 +160,7 @@ func New(options Options) (*Server, error) {
 		remoteTargets:       remoteTargetNames,
 		allowDynamicTargets: options.AllowDynamicTargets,
 		allowedRoots:        roots,
+		defaultInterface:    strings.TrimSpace(options.DefaultInterface),
 		maxConcurrent:       options.MaxConcurrent,
 		requestTimeout:      options.RequestTimeout,
 		semaphore:           make(chan struct{}, options.MaxConcurrent),
@@ -164,19 +169,19 @@ func New(options Options) (*Server, error) {
 	sdk.AddTool(s.mcp, &sdk.Tool{
 		Name:        "test_xray_config",
 		Title:       "Test one Xray config",
-		Description: "Run one Xray share link or JSON config through Xray-core and return its outbound IP, location, latency, reliability, and quality score. Use target to select a configured alias or direct SSH target when dynamic targets are enabled; otherwise it runs locally.",
+		Description: "Run one Xray share link or JSON config through Xray-core and return its outbound IP, location, latency, reliability, and quality score. Use interface to bind the local Xray outbound to a network interface, or leave it empty to use the MCP default. Use target to select a configured alias or direct SSH target when dynamic targets are enabled; otherwise it runs locally.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: boolPtr(true), DestructiveHint: boolPtr(false)},
 	}, s.testConfig)
 	sdk.AddTool(s.mcp, &sdk.Tool{
 		Name:        "test_xray_subscription",
 		Title:       "Rank Xray subscription configs",
-		Description: "Decode and test a plain-text or Base64 Xray subscription, then return a compact summary, the best result, ranked working configs, and optional failures. Use target to run the batch remotely through a configured alias or enabled direct SSH target.",
+		Description: "Decode and test a plain-text or Base64 Xray subscription, then return a compact summary, the best result, ranked working configs, and optional failures. Use interface to bind local Xray outbounds to a network interface, or leave it empty to use the MCP default. Use target to run the batch remotely through a configured alias or enabled direct SSH target.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: false, OpenWorldHint: boolPtr(true), DestructiveHint: boolPtr(false)},
 	}, s.testSubscription)
 	sdk.AddTool(s.mcp, &sdk.Tool{
 		Name:        "get_xrayprobe_status",
 		Title:       "Get XrayProbe status",
-		Description: "Return the XrayProbe version, current and installed local Xray-core versions, file roots, configured remote targets, and MCP limits. This tool does not contact remote services.",
+		Description: "Return the XrayProbe version, current and installed local Xray-core versions, file roots, configured remote targets, default network interface, and MCP limits. This tool does not contact remote services.",
 		Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: boolPtr(false), DestructiveHint: boolPtr(false)},
 	}, s.status)
 	return s, nil
@@ -286,7 +291,7 @@ func (s *Server) status(ctx context.Context, _ *sdk.CallToolRequest, _ struct{})
 		return nil, StatusOutput{}, ctx.Err()
 	default:
 	}
-	return nil, StatusOutput{SchemaVersion: 1, XrayProbe: version.Value, Platform: runtime.GOOS + "/" + runtime.GOARCH, CurrentCore: current, InstalledCores: installed, CacheDirectory: s.manager.Cache, AllowedRoots: append([]string(nil), s.allowedRoots...), RemoteTargets: append([]string(nil), s.remoteTargets...), AllowDynamicTargets: s.allowDynamicTargets, MaxConcurrent: s.maxConcurrent, RequestTimeout: s.requestTimeout.String()}, nil
+	return nil, StatusOutput{SchemaVersion: 1, XrayProbe: version.Value, Platform: runtime.GOOS + "/" + runtime.GOARCH, CurrentCore: current, InstalledCores: installed, CacheDirectory: s.manager.Cache, AllowedRoots: append([]string(nil), s.allowedRoots...), RemoteTargets: append([]string(nil), s.remoteTargets...), AllowDynamicTargets: s.allowDynamicTargets, DefaultInterface: s.defaultInterface, MaxConcurrent: s.maxConcurrent, RequestTimeout: s.requestTimeout.String()}, nil
 }
 
 func (s *Server) run(ctx context.Context, target string, source input.Source, options types.RunOptions) ([]types.Result, string, string, error) {
@@ -372,9 +377,13 @@ func (s *Server) runOptions(in ConfigInput, concurrency, maxConfigs int) (types.
 	if bytes < 1<<20 || bytes > 100<<20 {
 		return types.RunOptions{}, errors.New("download_bytes must be between 1048576 and 104857600")
 	}
+	networkInterface := strings.TrimSpace(in.Interface)
+	if networkInterface == "" {
+		networkInterface = s.defaultInterface
+	}
 	return types.RunOptions{
 		SourceKind: in.SourceType, AllowedRoots: s.allowedRoots, RestrictPaths: true,
-		CoreVersion: in.CoreVersion, OutboundTag: in.OutboundTag, Concurrency: concurrency, MaxConfigs: maxConfigs,
+		CoreVersion: in.CoreVersion, OutboundTag: in.OutboundTag, Interface: networkInterface, Concurrency: concurrency, MaxConfigs: maxConfigs,
 		Probe: types.ProbeOptions{Attempts: attempts, Timeout: time.Duration(timeout) * time.Second, ProbeURL: in.ProbeURL, MetadataURL: in.MetadataURL, NoMetadata: !includeMetadata, Speed: in.Speed, DownloadBytes: bytes},
 	}, nil
 }

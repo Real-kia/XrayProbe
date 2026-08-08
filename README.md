@@ -38,6 +38,18 @@ Test a native Xray JSON configuration:
 xrayprobe test ./config.json
 ```
 
+Bind Xray's outbound connections to a specific local network interface (for
+example, `en0` on macOS or `eth0` on Linux):
+
+```sh
+xrayprobe test --interface en0 ./config.json
+```
+
+Use `ifconfig` to list interface names. The interface setting is passed to
+Xray-core's outbound `sockopt.interface`, so it controls the connection from
+Xray to the tested server while the local MCP/CLI process itself remains on
+the normal loopback connection.
+
 Test and rank a plain-text or Base64 subscription:
 
 ```sh
@@ -56,10 +68,16 @@ Start it directly from a shell:
 
 ```sh
 xrayprobe mcp --allow-path /absolute/path/to/configs \
-  --allow-dynamic-targets
+  --allow-dynamic-targets \
+  --interface en0
 ```
 
 The server communicates over stdin/stdout using MCP. Diagnostics go to stderr. Without a `target`, tests run on the MCP host. A configured target uses non-interactive SSH, automatically installs the matching XrayProbe release in the remote user’s `~/.local/bin`, and lets that remote process download/cache Xray-core. The remote host needs SSH access from the MCP host plus `sh`, `curl`, and `tar` for first-time bootstrap.
+
+`--interface NAME` sets the default interface for local tests. Each test tool
+also accepts an optional `interface` field to override that default for one
+call. Leave both unset to use the operating system's normal route. When using
+a remote `target`, the interface name must exist on the remote machine.
 
 You can either configure friendly aliases once with `--target NAME=SSH_ADDRESS` or enable `--allow-dynamic-targets`. With the dynamic option, the AI can supply a direct SSH target in the tool input, such as `"target": "root@203.0.113.10"`, without changing MCP settings for each server. SSH keys, `~/.ssh/config`, jump hosts, and an SSH agent continue to be managed by the operating system. XrayProbe never stores passwords or private keys. Dynamic targets are opt-in and validated before being passed as an SSH destination.
 
@@ -98,7 +116,9 @@ Add an entry to Claude Desktop’s MCP configuration, replacing the paths:
         "mcp",
         "--allow-path",
         "/absolute/path/to/configs",
-        "--allow-dynamic-targets"
+        "--allow-dynamic-targets",
+        "--interface",
+        "en0"
       ]
     }
   }
@@ -130,6 +150,7 @@ Grades are Excellent (85+), Good (70+), Fair (50+), and Poor. Use `--speed` for 
 ```text
 --core-version latest|vX.Y.Z  Select the Xray-core release
 --outbound TAG                Select a JSON outbound explicitly
+--interface NAME              Bind Xray outbound connections to this interface
 --attempts N                  Probe attempts per config (default: 5)
 --timeout 10s                 Timeout for each probe request
 --concurrency N               Subscription workers (default: 4)

@@ -88,7 +88,7 @@ func runOne(ctx context.Context, binary, version string, spec types.Spec, option
 		result.Error = "could not allocate a local probe port"
 		return result
 	}
-	config, metadata, err := xrayconfig.Build(spec, port, options.OutboundTag)
+	config, metadata, err := xrayconfig.Build(spec, port, options.OutboundTag, options.Interface)
 	if err != nil {
 		result.Error = cleanError(err)
 		return result

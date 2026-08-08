@@ -102,6 +102,27 @@ func TestServerReturnsStructuredStatus(t *testing.T) {
 	}
 }
 
+func TestServerUsesDefaultAndPerCallInterface(t *testing.T) {
+	server, err := New(Options{Manager: &core.Manager{Cache: t.TempDir()}, Service: fakeRunner{}, DefaultInterface: "en0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	options, err := server.runOptions(ConfigInput{}, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.Interface != "en0" {
+		t.Fatalf("default interface = %q, want en0", options.Interface)
+	}
+	options, err = server.runOptions(ConfigInput{Interface: "en1"}, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if options.Interface != "en1" {
+		t.Fatalf("per-call interface = %q, want en1", options.Interface)
+	}
+}
+
 func TestServerReturnsConfigAndRankedSubscription(t *testing.T) {
 	session, cleanup := connectTestServer(t)
 	defer cleanup()
