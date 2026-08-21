@@ -38,6 +38,12 @@ Test a native Xray JSON configuration:
 xrayprobe test ./config.json
 ```
 
+The JSON input must be a complete Xray configuration. An outbound fragment
+from a panel (for example, an object with `protocol`, `settings`, and
+`streamSettings` at the top level) needs to be wrapped in an `outbounds` array;
+for a VLESS outbound, its server belongs under `settings.vnext[].address` and
+its client under `settings.vnext[].users[]`.
+
 Bind Xray's outbound connections to a specific local network interface (for
 example, `en0` on macOS or `eth0` on Linux):
 
@@ -49,6 +55,23 @@ Use `ifconfig` to list interface names. The interface setting is passed to
 Xray-core's outbound `sockopt.interface`, so it controls the connection from
 Xray to the tested server while the local MCP/CLI process itself remains on
 the normal loopback connection.
+
+For tunnel validation, test the public tunnel endpoint and the backend
+endpoint separately with the same profile. A direct pass does not prove that
+the forwarding path carries application data:
+
+```sh
+xrayprobe test --interface en0 --attempts 3 --timeout 15s \
+  --no-metadata --format table 'ss://...@PUBLIC_TUNNEL_IP:PORT'
+xrayprobe test --interface en0 --attempts 3 --timeout 15s \
+  --no-metadata --format table 'ss://...@BACKEND_IP:PORT'
+```
+
+If the backend passes but the tunnel fails, first verify that the public port
+actually reaches the tunnel listener rather than a stale DNAT/port-forward
+rule. Then check the tunnel's forwarded-byte counters and test the backend
+from the relay's loopback address as well as its public address; some Xray
+deployments accept the public path but stall when reached through loopback.
 
 Test and rank a plain-text or Base64 subscription:
 
