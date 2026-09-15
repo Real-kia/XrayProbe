@@ -50,11 +50,27 @@ if [ "$version" = "latest" ]; then
 else
   base="https://github.com/${repo}/releases/download/${version}"
 fi
+
+previous_version=""
+if [ -x "$install_dir/xrayprobe" ]; then
+  previous_version="$("$install_dir/xrayprobe" version 2>/dev/null | awk '{print $2}')"
+fi
+
+echo "XrayProbe installer"
+echo "  requested version: $version"
+echo "  platform:           $os_name/$arch_name"
+echo "  install directory:  $install_dir"
+if [ -n "$previous_version" ]; then
+  echo "  currently installed: $previous_version"
+fi
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 user_agent="xrayprobe-installer/$version"
+echo "downloading $archive..."
 curl -fsSL -A "$user_agent" "$base/$archive" -o "$tmp/$archive"
 curl -fsSL -A "$user_agent" "$base/checksums.txt" -o "$tmp/checksums.txt"
+echo "verifying checksum..."
 expected="$(awk -v name="$archive" '$2 == name {print $1}' "$tmp/checksums.txt")"
 [ -n "$expected" ] || { echo "checksum entry not found" >&2; exit 1; }
 if command -v sha256sum >/dev/null 2>&1; then
@@ -66,7 +82,14 @@ fi
 mkdir -p "$install_dir"
 tar -xzf "$tmp/$archive" -C "$tmp"
 install -m 0755 "$tmp/xrayprobe" "$install_dir/xrayprobe"
-echo "installed xrayprobe to $install_dir/xrayprobe"
+new_version="$("$install_dir/xrayprobe" version 2>/dev/null | awk '{print $2}')"
+if [ -z "$previous_version" ]; then
+  echo "installed xrayprobe $new_version to $install_dir/xrayprobe"
+elif [ "$previous_version" != "$new_version" ]; then
+  echo "updated xrayprobe $previous_version -> $new_version at $install_dir/xrayprobe"
+else
+  echo "xrayprobe $new_version is already the latest version ($install_dir/xrayprobe)"
+fi
 
 case ":$PATH:" in
   *":$install_dir:"*) ;;
@@ -94,9 +117,10 @@ case ":$PATH:" in
     ;;
 esac
 
-echo "downloading Xray-core..."
-if "$install_dir/xrayprobe" core install latest >/dev/null; then
-  echo "Xray-core is ready"
+echo "downloading Xray-core (this may take a moment)..."
+if "$install_dir/xrayprobe" core install latest >/dev/null 2>&1; then
+  core_version="$("$install_dir/xrayprobe" core current 2>/dev/null)"
+  echo "Xray-core $core_version is ready"
 else
   echo "warning: could not download Xray-core now; it will download automatically on the first 'xrayprobe test'" >&2
 fi

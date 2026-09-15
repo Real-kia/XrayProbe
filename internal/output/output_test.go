@@ -31,28 +31,49 @@ func sampleResults() []types.Result {
 	}
 }
 
+// parseBoxRow splits one bordered-table data row ("│ a │ b │ c │") into its
+// trimmed cell values.
+func parseBoxRow(line string) []string {
+	trimmed := strings.Trim(line, "│")
+	parts := strings.Split(trimmed, "│")
+	cells := make([]string, len(parts))
+	for i, part := range parts {
+		cells[i] = strings.TrimSpace(part)
+	}
+	return cells
+}
+
 func TestRenderTableRanksOkAboveFailedAndByScore(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Render(&buf, sampleResults(), "table", true); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if len(lines) != 4 {
-		t.Fatalf("expected header + 3 rows, got %d lines: %q", len(lines), lines)
+	// top border, header, separator, 3 data rows, bottom border
+	if len(lines) != 7 {
+		t.Fatalf("expected 7 lines (borders + header + 3 rows), got %d lines: %q", len(lines), lines)
 	}
-	if !strings.HasPrefix(lines[1], "best with tabs") {
-		t.Errorf("expected highest-scoring ok result first, got %q", lines[1])
+	header := parseBoxRow(lines[1])
+	if header[0] != "NAME" || header[len(header)-1] != "STATUS" {
+		t.Fatalf("unexpected header row: %v", header)
 	}
-	if !strings.HasPrefix(lines[2], "slow") {
-		t.Errorf("expected lower-scoring ok result second, got %q", lines[2])
+	row1 := parseBoxRow(lines[3])
+	if row1[0] != "best with tabs" {
+		t.Errorf("expected highest-scoring ok result first, got %q", row1[0])
 	}
-	if !strings.Contains(lines[3], "failed: dial failed with a newline") {
-		t.Errorf("expected failed result last with sanitized error, got %q", lines[3])
+	row2 := parseBoxRow(lines[4])
+	if row2[0] != "slow" {
+		t.Errorf("expected lower-scoring ok result second, got %q", row2[0])
 	}
-	if strings.ContainsAny(lines[1], "\t\n\r") && strings.Count(lines[1], "\t") != 9 {
-		// The table format itself uses tabs as column separators; only the
-		// embedded name/error values must have their own tabs/newlines stripped.
-		t.Errorf("unexpected raw tab/newline leaking from a field value: %q", lines[1])
+	row3 := parseBoxRow(lines[5])
+	status := row3[len(row3)-1]
+	if status != "failed: dial failed with a newline" {
+		t.Errorf("expected failed result last with sanitized error, got %q", status)
+	}
+	for i, line := range lines {
+		if strings.ContainsAny(line, "\t\n\r") {
+			t.Errorf("line %d contains a raw tab/newline that should have been sanitized: %q", i, line)
+		}
 	}
 }
 
@@ -116,10 +137,11 @@ func TestRenderTableShowsPlaceholderWhenMetadataLookupFailed(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected header + 1 row, got %d lines: %q", len(lines), lines)
+	// top border, header, separator, 1 data row, bottom border
+	if len(lines) != 5 {
+		t.Fatalf("expected 5 lines (borders + header + 1 row), got %d lines: %q", len(lines), lines)
 	}
-	fields := strings.Split(lines[1], "\t")
+	fields := parseBoxRow(lines[3])
 	if fields[2] != "-" {
 		t.Errorf("IP column = %q, want %q for a failed metadata lookup", fields[2], "-")
 	}
