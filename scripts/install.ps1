@@ -4,7 +4,7 @@ $version = if ($env:XRAYPROBE_VERSION) { $env:XRAYPROBE_VERSION } else { 'latest
 $installDir = if ($env:XRAYPROBE_INSTALL_DIR) { $env:XRAYPROBE_INSTALL_DIR } else { Join-Path $HOME 'bin' }
 $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'amd64' }
 $archive = "xrayprobe_windows_$arch.tar.gz"
-$base = "https://github.com/$repo/releases/download/$version"
+$base = if ($version -eq 'latest') { "https://github.com/$repo/releases/latest/download" } else { "https://github.com/$repo/releases/download/$version" }
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("xrayprobe-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {

@@ -1,3 +1,6 @@
 package version
 
-const Value = "0.4.2"
+// Value is overridden at release build time via -ldflags
+// "-X github.com/Real-kia/XrayProbe/internal/version.Value=...".
+// It stays "dev" for `go install` and local builds.
+var Value = "dev"

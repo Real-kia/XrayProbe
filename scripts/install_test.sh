@@ -7,8 +7,10 @@ ps_install="$script_dir/install.ps1"
 
 grep -F 'Linux) os_name="linux"' "$sh_install" >/dev/null
 grep -F 'Darwin) os_name="darwin"' "$sh_install" >/dev/null
+grep -F 'releases/latest/download' "$sh_install" >/dev/null
 grep -F 'releases/download/${version}' "$sh_install" >/dev/null
 grep -F 'xrayprobe_windows_$arch.tar.gz' "$ps_install" >/dev/null
+grep -F 'releases/latest/download' "$ps_install" >/dev/null
 grep -F 'releases/download/$version' "$ps_install" >/dev/null
 grep -F -- "-split '\\s+'" "$ps_install" >/dev/null
 grep -F 'user_agent="xrayprobe-installer/$version"' "$sh_install" >/dev/null
@@ -20,6 +22,12 @@ if grep -F 'xrayprobe_Linux_' "$sh_install" "$ps_install" >/dev/null 2>&1; then
 fi
 if grep -F 'xrayprobe_Darwin_' "$sh_install" "$ps_install" >/dev/null 2>&1; then
   echo 'installer still contains a case-sensitive Darwin archive name' >&2
+  exit 1
+fi
+# GitHub has no /releases/download/latest/<asset> route; only
+# /releases/latest/download/<asset> resolves the newest release.
+if grep -F 'releases/download/latest' "$sh_install" "$ps_install" >/dev/null 2>&1; then
+  echo 'installer still builds the invalid releases/download/latest URL' >&2
   exit 1
 fi
 

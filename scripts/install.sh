@@ -19,7 +19,11 @@ case "$arch" in
 esac
 
 archive="xrayprobe_${os_name}_${arch_name}.tar.gz"
-base="https://github.com/${repo}/releases/download/${version}"
+if [ "$version" = "latest" ]; then
+  base="https://github.com/${repo}/releases/latest/download"
+else
+  base="https://github.com/${repo}/releases/download/${version}"
+fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 user_agent="xrayprobe-installer/$version"

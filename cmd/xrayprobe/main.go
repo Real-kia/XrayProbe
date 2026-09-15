@@ -19,7 +19,7 @@ import (
 	versioninfo "github.com/Real-kia/XrayProbe/internal/version"
 )
 
-const version = versioninfo.Value
+var version = versioninfo.Value
 
 func main() { os.Exit(run(os.Args[1:])) }
 
