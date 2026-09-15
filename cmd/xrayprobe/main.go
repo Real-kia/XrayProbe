@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Real-kia/XrayProbe/internal/core"
@@ -148,14 +149,30 @@ func testCommand(manager *core.Manager, args []string) int {
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "usage: xrayprobe test [options] <URI|file|subscription-URL>")
+		if fs.NArg() > 1 && looksLikeShareLink(fs.Arg(0)) {
+			fmt.Fprintln(os.Stderr, "xrayprobe: your shell split the share link into multiple arguments.")
+			fmt.Fprintln(os.Stderr, "Share links contain '&', '?', and '#', which shells treat specially unless")
+			fmt.Fprintln(os.Stderr, "the whole link is quoted. Wrap it in single quotes, e.g.:")
+			fmt.Fprintf(os.Stderr, "  xrayprobe test '%s...'\n", fs.Arg(0))
+		} else {
+			fmt.Fprintln(os.Stderr, "usage: xrayprobe test [options] <URI|file|subscription-URL>")
+		}
 		return 2
 	}
 	if *concurrency < 1 || *attempts < 1 || *maxConfigs < 1 {
 		fmt.Fprintln(os.Stderr, "concurrency, attempts, and max-configs must be positive")
 		return 2
 	}
-	runOptions := types.RunOptions{CoreVersion: *coreVersion, OutboundTag: *outbound, Interface: *networkInterface, Concurrency: *concurrency, MaxConfigs: *maxConfigs, Probe: types.ProbeOptions{Attempts: *attempts, Timeout: *timeout, ProbeURL: *probeURL, MetadataURL: *metadataURL, NoMetadata: *noMetadata, Speed: *speed, DownloadBytes: *downloadBytes}}
+	var progressMu sync.Mutex
+	runOptions := types.RunOptions{
+		CoreVersion: *coreVersion, OutboundTag: *outbound, Interface: *networkInterface, Concurrency: *concurrency, MaxConfigs: *maxConfigs,
+		Probe: types.ProbeOptions{Attempts: *attempts, Timeout: *timeout, ProbeURL: *probeURL, MetadataURL: *metadataURL, NoMetadata: *noMetadata, Speed: *speed, DownloadBytes: *downloadBytes},
+		Progress: func(event types.ProgressEvent) {
+			progressMu.Lock()
+			defer progressMu.Unlock()
+			printProgress(event)
+		},
+	}
 	results, _, err := tester.Run(context.Background(), manager, fs.Arg(0), runOptions)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
@@ -182,6 +199,37 @@ func testCommand(manager *core.Manager, args []string) int {
 		}
 	}
 	return 1
+}
+
+func looksLikeShareLink(value string) bool {
+	value = strings.ToLower(value)
+	for _, scheme := range []string{"vless://", "vmess://", "trojan://", "ss://"} {
+		if strings.HasPrefix(value, scheme) {
+			return true
+		}
+	}
+	return false
+}
+
+func printProgress(event types.ProgressEvent) {
+	label := event.Name
+	if label == "" {
+		label = fmt.Sprintf("config %d", event.Index+1)
+	}
+	switch event.Phase {
+	case "start":
+		if event.Total > 1 {
+			fmt.Fprintf(os.Stderr, "[%d/%d] testing %s...\n", event.Index+1, event.Total, label)
+		} else {
+			fmt.Fprintf(os.Stderr, "testing %s...\n", label)
+		}
+	case "done":
+		if event.Status == "ok" {
+			fmt.Fprintf(os.Stderr, "  %s: ok (score %.0f, %s)\n", label, event.Score, event.Grade)
+		} else {
+			fmt.Fprintf(os.Stderr, "  %s: failed - %s\n", label, event.Error)
+		}
+	}
 }
 
 func coreCommand(manager *core.Manager, args []string) int {

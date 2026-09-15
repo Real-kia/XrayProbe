@@ -39,6 +39,20 @@ Test one share link:
 xrayprobe test 'vless://YOUR-UUID@example.com:443?security=tls&type=ws&path=%2F#example'
 ```
 
+Always wrap a share link in quotes (single or double both work). A share
+link's query string is full of `&`, `?`, and `#`, which shells treat as
+special characters when unquoted: `&` in particular tells the shell to run
+everything before it in the background and treat what follows as a separate
+command, silently truncating the link before `xrayprobe` ever sees the rest.
+This is a shell rule, not something `xrayprobe` can detect or work around —
+if you run one unquoted and see background job output like `[1] 12345`
+instead of a result table, that's what happened; add quotes and rerun it.
+
+While a test is running, progress (which config is being tested, and why
+each attempt failed — timed out, connection refused, DNS lookup failed, host
+unreachable, etc.) is printed to stderr as it happens, separately from the
+final result table on stdout.
+
 Test a native Xray JSON configuration:
 
 ```sh

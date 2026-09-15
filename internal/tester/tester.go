@@ -62,7 +62,7 @@ func (s *Service) Run(ctx context.Context, source input.Source, options types.Ru
 		go func() {
 			defer wg.Done()
 			for spec := range jobs {
-				results[spec.Index] = runOne(ctx, binary, version, spec, options)
+				results[spec.Index] = runOne(ctx, binary, version, spec, len(specs), options)
 			}
 		}()
 	}
@@ -80,17 +80,22 @@ func (s *Service) Run(ctx context.Context, source input.Source, options types.Ru
 	return results, version, nil
 }
 
-func runOne(ctx context.Context, binary, version string, spec types.Spec, options types.RunOptions) types.Result {
+func runOne(ctx context.Context, binary, version string, spec types.Spec, total int, options types.RunOptions) types.Result {
+	if options.Progress != nil {
+		options.Progress(types.ProgressEvent{Index: spec.Index, Total: total, Name: spec.Name, Phase: "start"})
+	}
 	result := types.Result{Index: spec.Index, ConfigID: configID(spec), Name: spec.Name, Core: version, Status: "failed"}
 	start := time.Now()
 	port, err := freePort()
 	if err != nil {
 		result.Error = "could not allocate a local probe port"
+		reportDone(options.Progress, spec, total, result)
 		return result
 	}
 	config, metadata, err := xrayconfig.Build(spec, port, options.OutboundTag, options.Interface)
 	if err != nil {
 		result.Error = cleanError(err)
+		reportDone(options.Progress, spec, total, result)
 		return result
 	}
 	result.Protocol, result.Transport, result.Security = metadata.Protocol, metadata.Transport, metadata.Security
@@ -109,7 +114,15 @@ func runOne(ctx context.Context, binary, version string, spec types.Spec, option
 	} else {
 		result.Error = cleanError(err)
 	}
+	reportDone(options.Progress, spec, total, result)
 	return result
+}
+
+func reportDone(progress func(types.ProgressEvent), spec types.Spec, total int, result types.Result) {
+	if progress == nil {
+		return
+	}
+	progress(types.ProgressEvent{Index: spec.Index, Total: total, Name: spec.Name, Phase: "done", Status: result.Status, Score: result.Score, Grade: result.Grade, Error: result.Error})
 }
 
 func freePort() (int, error) {

@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Real-kia/XrayProbe/internal/types"
@@ -45,6 +46,7 @@ func Run(ctx context.Context, address string, options types.ProbeOptions) (*type
 	}
 
 	latencies := make([]float64, 0, options.Attempts)
+	var lastErr error
 	for i := 0; i < options.Attempts; i++ {
 		attemptCtx, cancel := context.WithTimeout(ctx, options.Timeout)
 		start := time.Now()
@@ -53,6 +55,14 @@ func Run(ctx context.Context, address string, options types.ProbeOptions) (*type
 		cancel()
 		if err == nil {
 			latencies = append(latencies, elapsed)
+			if options.OnAttempt != nil {
+				options.OnAttempt(types.AttemptEvent{Index: i + 1, Total: options.Attempts, OK: true, LatencyMS: elapsed})
+			}
+		} else {
+			lastErr = err
+			if options.OnAttempt != nil {
+				options.OnAttempt(types.AttemptEvent{Index: i + 1, Total: options.Attempts, OK: false, Reason: ClassifyError(err)})
+			}
 		}
 	}
 	metrics := summarize(options.Attempts, latencies)
@@ -64,9 +74,84 @@ func Run(ctx context.Context, address string, options types.ProbeOptions) (*type
 		metrics.DownloadMbps = download(ctx, client, "https://speed.cloudflare.com/__down?bytes="+strconv.FormatInt(bytes, 10), options.Timeout, bytes)
 	}
 	if len(latencies) == 0 {
-		return outbound, metrics, errors.New("all probe requests failed")
+		return outbound, metrics, fmt.Errorf("all %d probe attempts failed: %s", options.Attempts, ClassifyError(lastErr))
 	}
 	return outbound, metrics, nil
+}
+
+// ClassifyError turns a probe failure into a short, specific reason (timed
+// out, connection refused, host unreachable, DNS failure, ...) instead of a
+// generic "request failed", so a failed test result says why it failed.
+func ClassifyError(err error) string {
+	if err == nil {
+		return "unknown error"
+	}
+	var probeErr *ProbeError
+	if errors.As(err, &probeErr) {
+		return probeErr.Reason
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timed out waiting for a response"
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		if dnsErr.IsTimeout {
+			return "DNS lookup timed out"
+		}
+		return fmt.Sprintf("DNS lookup failed for %s (no such host)", dnsErr.Name)
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "timed out waiting for a response"
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		switch {
+		case errors.Is(opErr.Err, syscall.ECONNREFUSED):
+			return "connection refused"
+		case errors.Is(opErr.Err, syscall.EHOSTUNREACH):
+			return "host unreachable"
+		case errors.Is(opErr.Err, syscall.ENETUNREACH):
+			return "network unreachable"
+		case errors.Is(opErr.Err, syscall.ECONNRESET):
+			// The upstream (or the proxy relaying to it) accepted the SOCKS
+			// tunnel and then reset the connection once real data was sent,
+			// instead of the proxy failing the SOCKS handshake up front.
+			return "connection reset by the destination after connecting"
+		}
+	}
+	return err.Error()
+}
+
+// ProbeError classifies a failure that occurred inside the local SOCKS
+// handshake with Xray-core, as opposed to Go's stdlib network errors.
+type ProbeError struct{ Reason string }
+
+func (e *ProbeError) Error() string { return e.Reason }
+
+// socksReplyReason maps a SOCKS5 (RFC 1928) reply code, as returned by
+// Xray-core for its outbound connection attempt, to a human reason.
+func socksReplyReason(code byte) string {
+	switch code {
+	case 0x01:
+		return "the proxy reported a general failure (often a DNS lookup failure on the outbound)"
+	case 0x02:
+		return "blocked by the proxy's routing rules"
+	case 0x03:
+		return "network unreachable"
+	case 0x04:
+		return "host unreachable (DNS or routing problem)"
+	case 0x05:
+		return "connection refused by the destination"
+	case 0x06:
+		return "connection timed out (TTL expired)"
+	case 0x07:
+		return "command not supported by the proxy"
+	case 0x08:
+		return "address type not supported by the proxy"
+	default:
+		return fmt.Sprintf("unknown SOCKS error code %d", code)
+	}
 }
 
 func clientFor(address string, timeout time.Duration) *http.Client {
@@ -241,7 +326,7 @@ func dialSOCKS5(ctx context.Context, proxyAddr, target string) (net.Conn, error)
 	dialer := &net.Dialer{Timeout: 10 * time.Second}
 	conn, err := dialer.DialContext(ctx, "tcp", proxyAddr)
 	if err != nil {
-		return nil, err
+		return nil, &ProbeError{Reason: "could not reach the local Xray process (it may have failed to start)"}
 	}
 	closeOnError := func(e error) (net.Conn, error) { conn.Close(); return nil, e }
 	if _, err = conn.Write([]byte{5, 1, 0}); err != nil {
@@ -286,7 +371,7 @@ func dialSOCKS5(ctx context.Context, proxyAddr, target string) (net.Conn, error)
 		return closeOnError(err)
 	}
 	if response[1] != 0 {
-		return closeOnError(fmt.Errorf("SOCKS proxy connection failed with code %d", response[1]))
+		return closeOnError(&ProbeError{Reason: socksReplyReason(response[1])})
 	}
 	var length int
 	switch response[3] {

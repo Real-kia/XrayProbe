@@ -20,6 +20,21 @@ type ProbeOptions struct {
 	NoMetadata    bool
 	Speed         bool
 	DownloadBytes int64
+	// OnAttempt, if set, is called synchronously after each probe attempt.
+	// CLI-only: never set by the MCP server or remote worker, and excluded
+	// from JSON so a remote WorkerRequest can still be marshaled.
+	OnAttempt func(AttemptEvent) `json:"-"`
+}
+
+// AttemptEvent reports the outcome of a single probe attempt as it happens,
+// so a caller can show progress instead of waiting silently for the batch
+// of attempts to finish.
+type AttemptEvent struct {
+	Index     int
+	Total     int
+	OK        bool
+	LatencyMS float64
+	Reason    string
 }
 
 type Result struct {
@@ -69,4 +84,22 @@ type RunOptions struct {
 	Concurrency   int
 	MaxConfigs    int
 	Probe         ProbeOptions
+	// Progress, if set, is called as each config starts and finishes
+	// testing. CLI-only: never set by the MCP server or remote worker, and
+	// excluded from JSON so a remote WorkerRequest can still be marshaled.
+	Progress func(ProgressEvent) `json:"-"`
+}
+
+// ProgressEvent reports that one config's test has started or finished, so
+// a caller can show that something is happening instead of waiting silently
+// for a whole batch (which can take minutes for a large subscription).
+type ProgressEvent struct {
+	Index  int
+	Total  int
+	Name   string
+	Phase  string // "start" or "done"
+	Status string // set on "done": "ok" or "failed"
+	Score  float64
+	Grade  string
+	Error  string
 }
