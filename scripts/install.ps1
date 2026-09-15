@@ -1,7 +1,27 @@
 $ErrorActionPreference = 'Stop'
 $repo = 'Real-kia/XrayProbe'
 $version = if ($env:XRAYPROBE_VERSION) { $env:XRAYPROBE_VERSION } else { 'latest' }
-$installDir = if ($env:XRAYPROBE_INSTALL_DIR) { $env:XRAYPROBE_INSTALL_DIR } else { Join-Path $HOME 'bin' }
+
+function Find-WritablePathDir {
+  foreach ($dir in ($env:Path -split ';')) {
+    if ([string]::IsNullOrWhiteSpace($dir)) { continue }
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) { continue }
+    $probe = Join-Path $dir ("." + [guid]::NewGuid().ToString() + ".tmp")
+    try {
+      [IO.File]::WriteAllText($probe, "")
+      Remove-Item $probe -ErrorAction SilentlyContinue
+      return $dir
+    } catch { continue }
+  }
+  return $null
+}
+
+if ($env:XRAYPROBE_INSTALL_DIR) {
+  $installDir = $env:XRAYPROBE_INSTALL_DIR
+} else {
+  $installDir = Find-WritablePathDir
+  if (-not $installDir) { $installDir = Join-Path $HOME 'bin' }
+}
 $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'amd64' }
 $archive = "xrayprobe_windows_$arch.tar.gz"
 $base = if ($version -eq 'latest') { "https://github.com/$repo/releases/latest/download" } else { "https://github.com/$repo/releases/download/$version" }
@@ -24,9 +44,12 @@ try {
 
   $pathDirs = $env:Path -split ';'
   if (-not ($pathDirs -contains $installDir)) {
-    Write-Warning "$installDir is not on your PATH, so the 'xrayprobe' command will not be found yet."
-    Write-Warning "Either run it by its full path ($exePath) or add it to your PATH, e.g.:"
-    Write-Warning "  [Environment]::SetEnvironmentVariable('Path', `$env:Path + ';$installDir', 'User')"
+    # This script runs in-process (irm | iex), so updating $env:Path here
+    # takes effect immediately in the caller's own session, not just future ones.
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    [Environment]::SetEnvironmentVariable('Path', "$userPath;$installDir", 'User')
+    $env:Path = "$env:Path;$installDir"
+    Write-Host "added $installDir to your user PATH"
   }
 
   Write-Host "downloading Xray-core..."

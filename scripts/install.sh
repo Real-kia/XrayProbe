@@ -3,9 +3,35 @@ set -eu
 
 repo="Real-kia/XrayProbe"
 version="${XRAYPROBE_VERSION:-latest}"
-install_dir="${XRAYPROBE_INSTALL_DIR:-$HOME/.local/bin}"
 os="$(uname -s)"
 arch="$(uname -m)"
+
+# A script run via `curl | sh` executes in a child process and cannot change
+# the PATH of the shell that invoked it, so `xrayprobe` only works right away
+# if we install into a directory the current PATH already resolves. Scan it
+# in its own priority order and use the first existing, writable entry.
+find_path_dir() {
+  old_ifs=$IFS
+  IFS=':'
+  for dir in $PATH; do
+    IFS=$old_ifs
+    if [ -n "$dir" ] && [ -d "$dir" ] && [ -w "$dir" ]; then
+      printf '%s' "$dir"
+      return 0
+    fi
+    IFS=':'
+  done
+  IFS=$old_ifs
+  return 1
+}
+
+install_dir="${XRAYPROBE_INSTALL_DIR:-}"
+if [ -z "$install_dir" ]; then
+  install_dir="$(find_path_dir || true)"
+fi
+if [ -z "$install_dir" ]; then
+  install_dir="$HOME/.local/bin"
+fi
 
 case "$os" in
   Linux) os_name="linux" ;;
@@ -45,12 +71,25 @@ echo "installed xrayprobe to $install_dir/xrayprobe"
 case ":$PATH:" in
   *":$install_dir:"*) ;;
   *)
+    export_line="export PATH=\"$install_dir:\$PATH\""
+    added_to=""
+    for profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+      [ -f "$profile" ] || continue
+      if ! grep -qF "$export_line" "$profile" 2>/dev/null; then
+        printf '\n# added by the XrayProbe installer\n%s\n' "$export_line" >>"$profile"
+      fi
+      added_to="$added_to $profile"
+    done
     echo "" >&2
-    echo "warning: $install_dir is not on your PATH, so the 'xrayprobe' command" >&2
-    echo "will not be found yet. Either run it by its full path:" >&2
+    echo "warning: $install_dir is not on your PATH yet, so 'xrayprobe' will not be" >&2
+    echo "found in this shell session. For right now, run it by its full path:" >&2
     echo "  $install_dir/xrayprobe" >&2
-    echo "or add this to your shell profile (~/.bashrc, ~/.profile, ...) and open a new shell:" >&2
-    echo "  export PATH=\"$install_dir:\$PATH\"" >&2
+    if [ -n "$added_to" ]; then
+      echo "It has been added to:$added_to for future shells; open a new shell (or run 'exec \$SHELL') to pick it up." >&2
+    else
+      echo "Add this to your shell profile and open a new shell:" >&2
+      echo "  $export_line" >&2
+    fi
     echo "" >&2
     ;;
 esac
