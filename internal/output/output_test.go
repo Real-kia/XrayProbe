@@ -100,6 +100,34 @@ func TestRenderCSVRoundTrips(t *testing.T) {
 	}
 }
 
+func TestRenderTableShowsPlaceholderWhenMetadataLookupFailed(t *testing.T) {
+	results := []types.Result{
+		{
+			Index: 0, ConfigID: "cfg_nometa", Name: "nometa", Protocol: "vless", Core: "v26.3.27",
+			Status: "ok", Score: 88, Grade: "Excellent",
+			// A failed metadata lookup leaves a non-nil but empty Outbound
+			// (see probe.Run), which must still render as "-", not blank.
+			Outbound: &types.OutboundInfo{},
+			Metrics:  &types.Metrics{SuccessRate: 100, MedianLatencyMS: 50, JitterMS: 1},
+		},
+	}
+	var buf bytes.Buffer
+	if err := Render(&buf, results, "table", false); err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected header + 1 row, got %d lines: %q", len(lines), lines)
+	}
+	fields := strings.Split(lines[1], "\t")
+	if fields[2] != "-" {
+		t.Errorf("IP column = %q, want %q for a failed metadata lookup", fields[2], "-")
+	}
+	if fields[3] != "-" {
+		t.Errorf("LOCATION column = %q, want %q for a failed metadata lookup", fields[3], "-")
+	}
+}
+
 func TestRenderUnsupportedFormat(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Render(&buf, sampleResults(), "yaml", false); err == nil {

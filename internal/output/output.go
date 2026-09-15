@@ -40,10 +40,11 @@ func tableOutput(w io.Writer, results []types.Result) error {
 	}
 	for _, result := range results {
 		ip, location, success, median, jitter := "-", "-", "-", "-", "-"
-		if result.Outbound != nil {
+		if result.Outbound != nil && result.Outbound.IP != "" {
 			ip = result.Outbound.IP
-			location = strings.TrimSpace(result.Outbound.City + ", " + result.Outbound.Country)
-			location = strings.Trim(location, ", ")
+			if trimmed := strings.Trim(strings.TrimSpace(result.Outbound.City+", "+result.Outbound.Country), ", "); trimmed != "" {
+				location = trimmed
+			}
 		}
 		if result.Metrics != nil {
 			success = fmt.Sprintf("%.0f%%", result.Metrics.SuccessRate)
