@@ -1,5 +1,11 @@
 # Security policy
 
+## About this project
+
+Much of XrayProbe's code was written with AI assistance. That means it can contain mistakes an experienced reviewer would catch, and it hasn't had the scrutiny that comes from years of production use. The project is open source specifically so that isn't the end of the story: issues, pull requests, and independent security review are welcome and genuinely useful here, not just a formality.
+
+If you find a bug, a rough edge, or something that looks unsafe, please say so — through an issue for general problems or privately for anything security-sensitive (see below).
+
 Please do not publish private share links, UUIDs, passwords, or subscription URLs in an issue.
 
 Report security vulnerabilities privately to the repository owner through GitHub rather than opening a public issue. Include a minimal reproduction, affected version, operating system, and the impact. Redact secrets from logs and screenshots.
