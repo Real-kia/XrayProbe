@@ -41,3 +41,23 @@ mkdir -p "$install_dir"
 tar -xzf "$tmp/$archive" -C "$tmp"
 install -m 0755 "$tmp/xrayprobe" "$install_dir/xrayprobe"
 echo "installed xrayprobe to $install_dir/xrayprobe"
+
+case ":$PATH:" in
+  *":$install_dir:"*) ;;
+  *)
+    echo "" >&2
+    echo "warning: $install_dir is not on your PATH, so the 'xrayprobe' command" >&2
+    echo "will not be found yet. Either run it by its full path:" >&2
+    echo "  $install_dir/xrayprobe" >&2
+    echo "or add this to your shell profile (~/.bashrc, ~/.profile, ...) and open a new shell:" >&2
+    echo "  export PATH=\"$install_dir:\$PATH\"" >&2
+    echo "" >&2
+    ;;
+esac
+
+echo "downloading Xray-core..."
+if "$install_dir/xrayprobe" core install latest >/dev/null; then
+  echo "Xray-core is ready"
+else
+  echo "warning: could not download Xray-core now; it will download automatically on the first 'xrayprobe test'" >&2
+fi

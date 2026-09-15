@@ -18,6 +18,13 @@ On Windows PowerShell:
 irm https://raw.githubusercontent.com/Real-kia/XrayProbe/main/scripts/install.ps1 | iex
 ```
 
+Both installers place the binary under `$HOME/.local/bin` (`$HOME\bin` on
+Windows) and also pre-download the latest stable Xray-core release, so
+`xrayprobe test` works immediately with no separate setup step. Set
+`XRAYPROBE_INSTALL_DIR` to install elsewhere. If that directory isn't on
+your `PATH`, the installer prints the exact line to add to your shell
+profile — run a new shell (or `source` it) afterward.
+
 You can also download a platform archive from the [Releases](https://github.com/Real-kia/XrayProbe/releases) page or install from source:
 
 ```sh

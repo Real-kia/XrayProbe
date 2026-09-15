@@ -19,7 +19,23 @@ try {
   tar -xzf $archivePath -C $tmp
   New-Item -ItemType Directory -Force -Path $installDir | Out-Null
   Copy-Item (Join-Path $tmp 'xrayprobe.exe') (Join-Path $installDir 'xrayprobe.exe') -Force
-  Write-Host "installed xrayprobe to $installDir\xrayprobe.exe"
+  $exePath = Join-Path $installDir 'xrayprobe.exe'
+  Write-Host "installed xrayprobe to $exePath"
+
+  $pathDirs = $env:Path -split ';'
+  if (-not ($pathDirs -contains $installDir)) {
+    Write-Warning "$installDir is not on your PATH, so the 'xrayprobe' command will not be found yet."
+    Write-Warning "Either run it by its full path ($exePath) or add it to your PATH, e.g.:"
+    Write-Warning "  [Environment]::SetEnvironmentVariable('Path', `$env:Path + ';$installDir', 'User')"
+  }
+
+  Write-Host "downloading Xray-core..."
+  & $exePath core install latest | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    Write-Host "Xray-core is ready"
+  } else {
+    Write-Warning "could not download Xray-core now; it will download automatically on the first 'xrayprobe test'"
+  }
 } finally {
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
