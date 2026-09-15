@@ -3,19 +3,21 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/core"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/input"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/remote"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/version"
+	"github.com/Real-kia/XrayProbe/internal/core"
+	"github.com/Real-kia/XrayProbe/internal/input"
+	"github.com/Real-kia/XrayProbe/internal/remote"
+	"github.com/Real-kia/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/version"
 )
 
 type fakeRunner struct{}
@@ -199,5 +201,19 @@ func decodeStructured(t *testing.T, value any, target any) {
 	}
 	if err := json.Unmarshal(b, target); err != nil {
 		t.Fatalf("decode structured content: %v (%s)", err, b)
+	}
+}
+
+func TestSafeErrorRedactsExactAndTransformedSource(t *testing.T) {
+	source := "vless://11111111-2222-3333-4444-555555555555@example.com:443"
+	exact := fmt.Errorf("parse %s: invalid host", source)
+	if got := safeError(exact, source).Error(); strings.Contains(got, "11111111") {
+		t.Errorf("exact-match redaction leaked the source: %q", got)
+	}
+
+	decoded := "vless://11111111-2222-3333-4444-555555555555%40example.com:443"
+	transformed := fmt.Errorf("upstream rejected %s", decoded)
+	if got := safeError(transformed, source).Error(); strings.Contains(got, "11111111") {
+		t.Errorf("pattern redaction did not strip a transformed copy of the credential link: %q", got)
 	}
 }

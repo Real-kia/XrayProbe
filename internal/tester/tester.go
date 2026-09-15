@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/core"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/input"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/probe"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
-	xrayconfig "github.com/KiaTheRandomGuy/XrayProbe/internal/xray"
+	"github.com/Real-kia/XrayProbe/internal/core"
+	"github.com/Real-kia/XrayProbe/internal/input"
+	"github.com/Real-kia/XrayProbe/internal/probe"
+	"github.com/Real-kia/XrayProbe/internal/types"
+	xrayconfig "github.com/Real-kia/XrayProbe/internal/xray"
 )
 
 type Service struct {

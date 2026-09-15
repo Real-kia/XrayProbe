@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -11,12 +12,12 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/core"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/input"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/remote"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/tester"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/version"
+	"github.com/Real-kia/XrayProbe/internal/core"
+	"github.com/Real-kia/XrayProbe/internal/input"
+	"github.com/Real-kia/XrayProbe/internal/remote"
+	"github.com/Real-kia/XrayProbe/internal/tester"
+	"github.com/Real-kia/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/version"
 )
 
 type Options struct {
@@ -408,11 +409,20 @@ func sourceKind(value, fallback string) string {
 	return value
 }
 
+// credentialLinkPattern catches share-link schemes even when the error message
+// carries a transformed copy of the source (URL-decoded, re-escaped, etc.)
+// that an exact substring match against the original input would miss.
+var credentialLinkPattern = regexp.MustCompile(`(?i)\b(?:vless|vmess|trojan|ss)://\S+`)
+
 func safeError(err error, source string) error {
 	if err == nil {
 		return nil
 	}
-	message := strings.ReplaceAll(err.Error(), source, "[redacted source]")
+	message := err.Error()
+	if source != "" {
+		message = strings.ReplaceAll(message, source, "[redacted source]")
+	}
+	message = credentialLinkPattern.ReplaceAllString(message, "[redacted source]")
 	return errors.New(message)
 }
 

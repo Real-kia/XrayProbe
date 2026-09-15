@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/types"
 )
 
 type Metadata struct {

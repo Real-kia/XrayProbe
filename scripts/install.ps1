@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$repo = 'KiaTheRandomGuy/XrayProbe'
+$repo = 'Real-kia/XrayProbe'
 $version = if ($env:XRAYPROBE_VERSION) { $env:XRAYPROBE_VERSION } else { 'latest' }
 $installDir = if ($env:XRAYPROBE_INSTALL_DIR) { $env:XRAYPROBE_INSTALL_DIR } else { Join-Path $HOME 'bin' }
 $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') { 'arm64' } else { 'amd64' }

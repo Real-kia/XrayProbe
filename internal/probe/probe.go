@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/types"
 )
 
 func Run(ctx context.Context, address string, options types.ProbeOptions) (*types.OutboundInfo, *types.Metrics, error) {

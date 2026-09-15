@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/input"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/version"
+	"github.com/Real-kia/XrayProbe/internal/input"
+	"github.com/Real-kia/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/version"
 )
 
 const (
@@ -152,7 +152,7 @@ if [ -x "$bin" ]; then
 fi
 if [ "$current" != "xrayprobe %s" ]; then
   command -v curl >/dev/null 2>&1 || { echo "remote bootstrap requires curl" >&2; exit 1; }
-  XRAYPROBE_VERSION=%s XRAYPROBE_INSTALL_DIR="${HOME}/.local/bin" sh -c "$(curl -fsSL https://raw.githubusercontent.com/KiaTheRandomGuy/XrayProbe/main/scripts/install.sh)" >&2
+  XRAYPROBE_VERSION=%s XRAYPROBE_INSTALL_DIR="${HOME}/.local/bin" sh -c "$(curl -fsSL https://raw.githubusercontent.com/Real-kia/XrayProbe/main/scripts/install.sh)" >&2
 fi
 exec "$bin" remote-worker`, version.Value, release)
 }

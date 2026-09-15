@@ -9,19 +9,19 @@ XrayProbe is unofficial and is not affiliated with or endorsed by [Project X / X
 On Linux or macOS:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/KiaTheRandomGuy/XrayProbe/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Real-kia/XrayProbe/main/scripts/install.sh | sh
 ```
 
 On Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/KiaTheRandomGuy/XrayProbe/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/Real-kia/XrayProbe/main/scripts/install.ps1 | iex
 ```
 
-You can also download a platform archive from the [Releases](https://github.com/KiaTheRandomGuy/XrayProbe/releases) page or install from source:
+You can also download a platform archive from the [Releases](https://github.com/Real-kia/XrayProbe/releases) page or install from source:
 
 ```sh
-go install github.com/KiaTheRandomGuy/XrayProbe/cmd/xrayprobe@latest
+go install github.com/Real-kia/XrayProbe/cmd/xrayprobe@latest
 ```
 
 ## Quick start
@@ -112,6 +112,11 @@ example, `xrayprobe_linux_amd64.tar.gz`); the installer validates the matching
 checksum before installation. If bootstrap fails, no probe result is produced;
 fix SSH/bootstrap errors before interpreting the config as failed.
 
+Bootstrap fetches `scripts/install.sh` from this repository's `main` branch
+over HTTPS and runs it unattended on the remote host (the downloaded release
+archive itself is checksum-verified before use). Only point `--target` /
+dynamic targets at hosts you trust, the same as any `curl | sh` bootstrap.
+
 By default, MCP file inputs may read only files under the server’s working directory. Add one or more `--allow-path` directories for config folders. Share links, JSON/text values, and HTTPS subscription URLs can be passed directly by tools. File inputs are resolved through symlinks and limited to 10 MiB; subscription decoding is limited to 500 configs by default. Use a dedicated working directory and allow only trusted config directories.
 
 ### Codex
@@ -125,6 +130,14 @@ codex mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp \
 ```
 
 For a binary installed on `PATH`, first resolve its path with `command -v xrayprobe` and use that absolute path in the registration command.
+
+### Claude Code
+
+```sh
+claude mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp \
+  --allow-path /absolute/path/to/configs \
+  --allow-dynamic-targets
+```
 
 ### Claude Desktop
 

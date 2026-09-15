@@ -1,6 +1,34 @@
+# Build artifacts
+/xrayprobe
+/xrayprobe.exe
+/bin/
+/dist/
+
+# Go
 *.test
 *.out
-dist/
-.DS_Store
+coverage.txt
+coverage.html
+go.work
+go.work.sum
+
+# Editors / IDEs
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Local scratch configs a developer might test against
+/configs/
+/*.local.json

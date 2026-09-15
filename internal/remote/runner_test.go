@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/version"
+	"github.com/Real-kia/XrayProbe/internal/version"
 )
 
 func TestParseAndValidateTargets(t *testing.T) {

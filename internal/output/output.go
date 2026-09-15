@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/types"
 )
 
 func Render(w io.Writer, results []types.Result, format string, ranked bool) error {

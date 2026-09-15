@@ -3,7 +3,7 @@ package probe
 import (
 	"testing"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/types"
 )
 
 func TestSummarize(t *testing.T) {

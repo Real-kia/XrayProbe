@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/core"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/mcpserver"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/output"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/remote"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/tester"
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
-	versioninfo "github.com/KiaTheRandomGuy/XrayProbe/internal/version"
+	"github.com/Real-kia/XrayProbe/internal/core"
+	"github.com/Real-kia/XrayProbe/internal/mcpserver"
+	"github.com/Real-kia/XrayProbe/internal/output"
+	"github.com/Real-kia/XrayProbe/internal/remote"
+	"github.com/Real-kia/XrayProbe/internal/tester"
+	"github.com/Real-kia/XrayProbe/internal/types"
+	versioninfo "github.com/Real-kia/XrayProbe/internal/version"
 )
 
 const version = versioninfo.Value

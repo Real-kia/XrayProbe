@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/types"
 )
 
 func TestBuildVLESSReality(t *testing.T) {

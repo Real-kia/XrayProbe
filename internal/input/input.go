@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KiaTheRandomGuy/XrayProbe/internal/types"
+	"github.com/Real-kia/XrayProbe/internal/types"
 )
 
 const maxSubscriptionBytes = 10 << 20

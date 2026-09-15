@@ -1,4 +1,4 @@
-module github.com/KiaTheRandomGuy/XrayProbe
+module github.com/Real-kia/XrayProbe
 
 go 1.25.0
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-repo="KiaTheRandomGuy/XrayProbe"
+repo="Real-kia/XrayProbe"
 version="${XRAYPROBE_VERSION:-latest}"
 install_dir="${XRAYPROBE_INSTALL_DIR:-$HOME/.local/bin}"
 os="$(uname -s)"
