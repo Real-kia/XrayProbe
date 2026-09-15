@@ -7,12 +7,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Real-kia/XrayProbe/internal/core"
 	"github.com/Real-kia/XrayProbe/internal/mcpserver"
+	"github.com/Real-kia/XrayProbe/internal/netutil"
 	"github.com/Real-kia/XrayProbe/internal/output"
 	"github.com/Real-kia/XrayProbe/internal/remote"
 	"github.com/Real-kia/XrayProbe/internal/tester"
@@ -59,6 +63,9 @@ func run(args []string) int {
 }
 
 func mcpCommand(manager *core.Manager, args []string) int {
+	if len(args) > 0 && args[0] == "setup" {
+		return mcpSetupCommand(args[1:])
+	}
 	for _, arg := range args {
 		if arg == "--help" || arg == "-h" {
 			mcpUsage(os.Stdout)
@@ -97,6 +104,162 @@ func mcpCommand(manager *core.Manager, args []string) int {
 		return 3
 	}
 	return 0
+}
+
+// mcpSetupCommand registers xrayprobe as an MCP server for a supported AI
+// client in one step, instead of the user hand-resolving an absolute binary
+// path, hand-editing JSON, or hunting down a network interface name.
+func mcpSetupCommand(args []string) int {
+	if len(args) != 1 || args[0] == "--help" || args[0] == "-h" {
+		fmt.Fprintln(os.Stderr, "usage: xrayprobe mcp setup <claude-code|codex|claude-desktop>")
+		return 2
+	}
+	target := args[0]
+
+	binaryPath, err := os.Executable()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "xrayprobe: could not resolve the xrayprobe binary path:", err)
+		return 3
+	}
+	if resolved, err := filepath.EvalSymlinks(binaryPath); err == nil {
+		binaryPath = resolved
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "xrayprobe: could not resolve your home directory:", err)
+		return 3
+	}
+	configsDir := filepath.Join(home, ".xrayprobe", "configs")
+	if err := os.MkdirAll(configsDir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, "xrayprobe: could not create", configsDir+":", err)
+		return 3
+	}
+
+	networkInterface := ""
+	if detected, err := netutil.DefaultInterfaceName(); err == nil && detected != "" {
+		networkInterface = detected
+		fmt.Println("detected default network interface:", detected)
+	}
+
+	switch target {
+	case "claude-code":
+		err = mcpSetupCLIClient("claude", binaryPath, configsDir, networkInterface)
+	case "codex":
+		err = mcpSetupCLIClient("codex", binaryPath, configsDir, networkInterface)
+	case "claude-desktop":
+		err = mcpSetupClaudeDesktop(binaryPath, configsDir, networkInterface)
+	default:
+		fmt.Fprintf(os.Stderr, "xrayprobe: unknown MCP client %q; supported: claude-code, codex, claude-desktop\n", target)
+		return 2
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "xrayprobe:", err)
+		return 3
+	}
+	return 0
+}
+
+// mcpServerArgs builds the arguments xrayprobe itself needs when launched as
+// an MCP server, shared by every client's registration.
+func mcpServerArgs(binaryPath, configsDir, networkInterface string) []string {
+	args := []string{"mcp", "--allow-path", configsDir}
+	if networkInterface != "" {
+		args = append(args, "--interface", networkInterface)
+	}
+	return args
+}
+
+// mcpSetupCLIClient registers xrayprobe with an MCP client that itself
+// exposes a CLI (`claude mcp add` / `codex mcp add`), so the user runs one
+// xrayprobe command instead of resolving a path and typing that command
+// themselves. Falls back to printing the exact command if the client's CLI
+// isn't on PATH.
+func mcpSetupCLIClient(clientBinary, binaryPath, configsDir, networkInterface string) error {
+	registerArgs := append([]string{"mcp", "add", "xrayprobe", "--", binaryPath}, mcpServerArgs(binaryPath, configsDir, networkInterface)...)
+	if _, err := exec.LookPath(clientBinary); err != nil {
+		fmt.Printf("could not find '%s' on PATH; run this yourself once it's installed:\n  %s %s\n", clientBinary, clientBinary, strings.Join(registerArgs, " "))
+		return nil
+	}
+	cmd := exec.Command(clientBinary, registerArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s %s: %w", clientBinary, strings.Join(registerArgs, " "), err)
+	}
+	return nil
+}
+
+// mcpSetupClaudeDesktop merges an xrayprobe entry into Claude Desktop's
+// mcpServers config, preserving any other servers or settings already
+// there, instead of the user hand-editing JSON in the right OS-specific
+// location and getting the syntax right.
+func mcpSetupClaudeDesktop(binaryPath, configsDir, networkInterface string) error {
+	configPath, err := claudeDesktopConfigPath()
+	if err != nil {
+		return err
+	}
+
+	root := map[string]json.RawMessage{}
+	if data, readErr := os.ReadFile(configPath); readErr == nil {
+		if err := json.Unmarshal(data, &root); err != nil {
+			return fmt.Errorf("existing Claude Desktop config at %s is not valid JSON: %w", configPath, err)
+		}
+	} else if !os.IsNotExist(readErr) {
+		return readErr
+	}
+
+	servers := map[string]json.RawMessage{}
+	if raw, ok := root["mcpServers"]; ok {
+		if err := json.Unmarshal(raw, &servers); err != nil {
+			return fmt.Errorf("existing mcpServers in %s is not valid JSON: %w", configPath, err)
+		}
+	}
+
+	entry, err := json.Marshal(map[string]any{"command": binaryPath, "args": mcpServerArgs(binaryPath, configsDir, networkInterface)})
+	if err != nil {
+		return err
+	}
+	servers["xrayprobe"] = entry
+
+	serversBytes, err := json.Marshal(servers)
+	if err != nil {
+		return err
+	}
+	root["mcpServers"] = serversBytes
+
+	out, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		return err
+	}
+	if err := os.WriteFile(configPath, out, 0o600); err != nil {
+		return err
+	}
+	fmt.Println("updated", configPath)
+	fmt.Println("restart Claude Desktop to load the xrayprobe MCP server.")
+	return nil
+}
+
+func claudeDesktopConfigPath() (string, error) {
+	switch runtime.GOOS {
+	case "darwin":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"), nil
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			return "", fmt.Errorf("%%APPDATA%% is not set")
+		}
+		return filepath.Join(appData, "Claude", "claude_desktop_config.json"), nil
+	default:
+		return "", fmt.Errorf("Claude Desktop is not available on %s; use 'xrayprobe mcp setup claude-code' or 'xrayprobe mcp setup codex' instead", runtime.GOOS)
+	}
 }
 
 func remoteWorkerCommand(manager *core.Manager, args []string) int {
@@ -332,6 +495,7 @@ Usage:
   xrayprobe core list [--remote]
   xrayprobe core current
   xrayprobe mcp [options]
+  xrayprobe mcp setup <claude-code|codex|claude-desktop>
   xrayprobe version
 
 Examples:
@@ -339,6 +503,7 @@ Examples:
   xrayprobe test ./config.json --format json
   xrayprobe test https://example.com/subscription.txt --concurrency 4
   xrayprobe core install v26.3.27
+  xrayprobe mcp setup claude-code
 
 Use "xrayprobe test --help" for test options.
 Use "xrayprobe mcp --help" for MCP server options.
@@ -370,9 +535,17 @@ Options:
 func mcpUsage(w io.Writer) {
 	_, _ = fmt.Fprint(w, `Usage:
   xrayprobe mcp [options]
+  xrayprobe mcp setup <claude-code|codex|claude-desktop>
 
 Run the local stdio MCP server for AI clients. File inputs are limited to the
 current working directory unless one or more --allow-path directories are set.
+
+"xrayprobe mcp setup <client>" registers xrayprobe with that client for you:
+it resolves this binary's absolute path, detects your default network
+interface, creates a configs directory under ~/.xrayprobe, and either runs
+the client's own "mcp add" command (claude-code, codex) or merges the entry
+into Claude Desktop's config file directly (claude-desktop) - no manual path
+lookup or hand-edited JSON required.
 
 Options:
   --allow-path DIR             Allow MCP file inputs under DIR (repeatable)

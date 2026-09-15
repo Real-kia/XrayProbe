@@ -95,11 +95,30 @@ XrayProbe includes a local stdio [Model Context Protocol](https://modelcontextpr
 * `test_xray_subscription` tests a subscription and returns a summary, the best config, the top working results, and compact failures, locally or remotely.
 * `get_xrayprobe_status` reports the XrayProbe/core cache and server limits.
 
+### Quick setup (recommended)
+
+```sh
+xrayprobe mcp setup claude-code    # or: codex, claude-desktop
+```
+
+This registers xrayprobe as an MCP server in one step: it resolves this
+binary's absolute path itself, detects your default network interface so you
+don't have to look it up, creates `~/.xrayprobe/configs` as a default
+`--allow-path` directory, and either runs the client's own `mcp add` command
+(`claude-code`, `codex`) or merges the entry directly into Claude Desktop's
+config file (`claude-desktop`) without disturbing any other servers or
+settings already there. Restart the client afterward to pick it up.
+
+It does not enable `--allow-dynamic-targets` (remote SSH targets supplied by
+the AI itself) - that's a meaningfully more permissive capability, covered
+separately below, and worth turning on deliberately rather than by default.
+
+### Manual setup / advanced options
+
 Start it directly from a shell:
 
 ```sh
 xrayprobe mcp --allow-path /absolute/path/to/configs \
-  --allow-dynamic-targets \
   --interface en0
 ```
 
@@ -129,27 +148,32 @@ By default, MCP file inputs may read only files under the server’s working dir
 
 ### Codex
 
-Register the binary as a local MCP server. Use an absolute binary and config path:
+`xrayprobe mcp setup codex` does this for you (see above). To do it by hand,
+register the binary as a local MCP server with an absolute binary and config
+path:
 
 ```sh
 codex mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp \
-  --allow-path /absolute/path/to/configs \
-  --allow-dynamic-targets
+  --allow-path /absolute/path/to/configs
 ```
 
-For a binary installed on `PATH`, first resolve its path with `command -v xrayprobe` and use that absolute path in the registration command.
+For a binary installed on `PATH`, first resolve its path with `command -v xrayprobe` and use that absolute path in the registration command. Add `--allow-dynamic-targets` at the end if you want the AI to be able to supply direct SSH targets (see "Manual setup / advanced options" above) - it's opt-in for a reason.
 
 ### Claude Code
 
+`xrayprobe mcp setup claude-code` does this for you (see above). By hand:
+
 ```sh
 claude mcp add xrayprobe -- /absolute/path/to/xrayprobe mcp \
-  --allow-path /absolute/path/to/configs \
-  --allow-dynamic-targets
+  --allow-path /absolute/path/to/configs
 ```
 
 ### Claude Desktop
 
-Add an entry to Claude Desktop’s MCP configuration, replacing the paths:
+`xrayprobe mcp setup claude-desktop` does this for you (see above) - it finds
+the right config file for your OS and merges the entry in without touching
+anything else already configured there. By hand, add an entry to Claude
+Desktop's MCP configuration, replacing the paths:
 
 ```json
 {
@@ -160,7 +184,6 @@ Add an entry to Claude Desktop’s MCP configuration, replacing the paths:
         "mcp",
         "--allow-path",
         "/absolute/path/to/configs",
-        "--allow-dynamic-targets",
         "--interface",
         "en0"
       ]
