@@ -172,8 +172,11 @@ func vmess(u *url.URL) (map[string]any, string, error) {
 		ALPN string `json:"alpn"`
 		FP   string `json:"fp"`
 		PBK  string `json:"pbk"`
-		SID  string `json:"sid"`
-		SPX  string `json:"spx"`
+		SID   string          `json:"sid"`
+		SPX   string          `json:"spx"`
+		PCS   string          `json:"pcs"`
+		Mode  string          `json:"mode"`
+		Extra json.RawMessage `json:"extra"`
 	}
 	if err := json.Unmarshal(b, &item); err != nil {
 		return nil, "", fmt.Errorf("decode VMess payload: %w", err)
@@ -199,6 +202,15 @@ func vmess(u *url.URL) (map[string]any, string, error) {
 	q.Set("pbk", item.PBK)
 	q.Set("sid", item.SID)
 	q.Set("spx", item.SPX)
+	if item.PCS != "" {
+		q.Set("pcs", item.PCS)
+	}
+	if item.Mode != "" {
+		q.Set("mode", item.Mode)
+	}
+	if len(item.Extra) > 0 {
+		q.Set("extra", string(item.Extra))
+	}
 	stream := streamSettings(&url.URL{Host: item.Add, RawQuery: q.Encode()})
 	if len(stream) > 0 {
 		out["streamSettings"] = stream
@@ -296,6 +308,12 @@ func streamSettings(u *url.URL) map[string]any {
 		if q.Get("allowInsecure") == "1" || strings.EqualFold(q.Get("allowInsecure"), "true") {
 			settings["allowInsecure"] = true
 		}
+		if pcs := firstNonEmpty(q.Get("pcs"), q.Get("pinnedPeerCertSha256"), q.Get("pinnedpeercertsha256")); pcs != "" {
+			cleanPin := strings.TrimSpace(strings.ReplaceAll(pcs, ":", ""))
+			if cleanPin != "" {
+				settings["pinnedPeerCertSha256"] = cleanPin
+			}
+		}
 		stream["tlsSettings"] = settings
 	}
 	if security == "reality" {
@@ -322,8 +340,21 @@ func streamSettings(u *url.URL) map[string]any {
 		stream["grpcSettings"] = map[string]any{"serviceName": q.Get("serviceName"), "multiMode": q.Get("mode") == "multi"}
 	case "httpupgrade":
 		stream["httpupgradeSettings"] = map[string]any{"path": queryOr(u, "path", "/"), "host": q.Get("host")}
-	case "xhttp":
-		stream["xhttpSettings"] = map[string]any{"path": queryOr(u, "path", "/"), "mode": queryOr(u, "mode", "auto"), "host": q.Get("host")}
+	case "xhttp", "splithttp":
+		xhttp := map[string]any{"path": queryOr(u, "path", "/"), "mode": queryOr(u, "mode", "auto"), "host": q.Get("host")}
+		if extraStr := q.Get("extra"); extraStr != "" {
+			if unquoted, err := url.QueryUnescape(extraStr); err == nil && strings.HasPrefix(strings.TrimSpace(unquoted), "{") {
+				extraStr = unquoted
+			}
+			var extraMap map[string]any
+			if err := json.Unmarshal([]byte(extraStr), &extraMap); err == nil {
+				xhttp["extra"] = extraMap
+			}
+		}
+		stream["xhttpSettings"] = xhttp
+		if network == "splithttp" {
+			stream["splithttpSettings"] = xhttp
+		}
 	}
 	return stream
 }
