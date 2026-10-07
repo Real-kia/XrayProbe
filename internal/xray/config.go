@@ -157,21 +157,21 @@ func vmess(u *url.URL) (map[string]any, string, error) {
 		return nil, "", err
 	}
 	var item struct {
-		PS   string `json:"ps"`
-		Add  string `json:"add"`
-		Port any    `json:"port"`
-		ID   string `json:"id"`
-		AID  any    `json:"aid"`
-		Scy  string `json:"scy"`
-		Net  string `json:"net"`
-		Type string `json:"type"`
-		Host string `json:"host"`
-		Path string `json:"path"`
-		TLS  string `json:"tls"`
-		SNI  string `json:"sni"`
-		ALPN string `json:"alpn"`
-		FP   string `json:"fp"`
-		PBK  string `json:"pbk"`
+		PS    string          `json:"ps"`
+		Add   string          `json:"add"`
+		Port  any             `json:"port"`
+		ID    string          `json:"id"`
+		AID   any             `json:"aid"`
+		Scy   string          `json:"scy"`
+		Net   string          `json:"net"`
+		Type  string          `json:"type"`
+		Host  string          `json:"host"`
+		Path  string          `json:"path"`
+		TLS   string          `json:"tls"`
+		SNI   string          `json:"sni"`
+		ALPN  string          `json:"alpn"`
+		FP    string          `json:"fp"`
+		PBK   string          `json:"pbk"`
 		SID   string          `json:"sid"`
 		SPX   string          `json:"spx"`
 		PCS   string          `json:"pcs"`
