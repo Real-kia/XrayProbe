@@ -142,14 +142,41 @@ func (m *Manager) Resolve(ctx context.Context, requested string) (Release, error
 	return Release{}, fmt.Errorf("Xray-core release %q was not found", requested)
 }
 
+func (m *Manager) binaryPath(version string) string {
+	binary := filepath.Join(m.Cache, version, runtime.GOOS+"-"+runtime.GOARCH, "xray")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	return binary
+}
+
 func (m *Manager) Ensure(ctx context.Context, requested string) (string, string, error) {
 	m.ensureMu.Lock()
 	defer m.ensureMu.Unlock()
 	if requested == "" {
 		requested, _ = m.Current()
 	}
+	// A pinned version that is already cached needs no network at all, so
+	// frequent runs do not spend GitHub's anonymous API quota (60 per hour).
+	if requested != "" && requested != latestVersion {
+		version := normalizeVersion(requested)
+		if binary := m.binaryPath(version); executable(binary) {
+			return binary, version, nil
+		}
+	}
 	release, err := m.Resolve(ctx, requested)
 	if err != nil {
+		// Could not reach GitHub (or it rate-limited us): "latest" falls back to
+		// the newest core already installed rather than failing the run.
+		if requested == "" || requested == latestVersion {
+			if versions, listErr := m.Installed(); listErr == nil {
+				for i := len(versions) - 1; i >= 0; i-- {
+					if binary := m.binaryPath(versions[i]); executable(binary) {
+						return binary, versions[i], nil
+					}
+				}
+			}
+		}
 		return "", "", err
 	}
 	asset, err := chooseAsset(release.Assets, runtime.GOOS, runtime.GOARCH)
@@ -158,10 +185,7 @@ func (m *Manager) Ensure(ctx context.Context, requested string) (string, string,
 	}
 	version := normalizeVersion(release.TagName)
 	dir := filepath.Join(m.Cache, version, runtime.GOOS+"-"+runtime.GOARCH)
-	binary := filepath.Join(dir, "xray")
-	if runtime.GOOS == "windows" {
-		binary += ".exe"
-	}
+	binary := m.binaryPath(version)
 	if executable(binary) {
 		return binary, version, nil
 	}

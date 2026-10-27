@@ -60,3 +60,57 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
+
+func fakeCore(t *testing.T, m *Manager, version string) string {
+	t.Helper()
+	binary := m.binaryPath(version)
+	if err := os.MkdirAll(filepath.Dir(binary), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return binary
+}
+
+func failingHTTP(t *testing.T) *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		t.Errorf("unexpected network request to %s", req.URL)
+		return &http.Response{StatusCode: http.StatusForbidden, Status: "403 Forbidden", Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: req}, nil
+	})}
+}
+
+func TestEnsureUsesCachedPinnedVersionWithoutNetwork(t *testing.T) {
+	m := &Manager{Cache: filepath.Join(t.TempDir(), "cores"), HTTP: failingHTTP(t), Repo: "XTLS/Xray-core", BaseURL: "https://api.example.test"}
+	want := fakeCore(t, m, "v26.3.27")
+	for _, requested := range []string{"v26.3.27", "26.3.27"} {
+		binary, version, err := m.Ensure(context.Background(), requested)
+		if err != nil || binary != want || version != "v26.3.27" {
+			t.Fatalf("Ensure(%q) = %q, %q, %v", requested, binary, version, err)
+		}
+	}
+}
+
+func TestEnsureLatestFallsBackToInstalledCoreWhenGitHubRefuses(t *testing.T) {
+	forbidden := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusForbidden, Status: "403 Forbidden", Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: req}, nil
+	})}
+	m := &Manager{Cache: filepath.Join(t.TempDir(), "cores"), HTTP: forbidden, Repo: "XTLS/Xray-core", BaseURL: "https://api.example.test"}
+	fakeCore(t, m, "v25.1.1")
+	want := fakeCore(t, m, "v26.3.27")
+	binary, version, err := m.Ensure(context.Background(), "")
+	if err != nil || binary != want || version != "v26.3.27" {
+		t.Fatalf("Ensure(latest) = %q, %q, %v", binary, version, err)
+	}
+}
+
+func TestEnsureUncachedPinnedVersionStillFailsWhenGitHubRefuses(t *testing.T) {
+	forbidden := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusForbidden, Status: "403 Forbidden", Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header), Request: req}, nil
+	})}
+	m := &Manager{Cache: filepath.Join(t.TempDir(), "cores"), HTTP: forbidden, Repo: "XTLS/Xray-core", BaseURL: "https://api.example.test"}
+	fakeCore(t, m, "v25.1.1")
+	if _, _, err := m.Ensure(context.Background(), "v26.3.27"); err == nil {
+		t.Fatal("expected an error for an uncached pinned version")
+	}
+}
