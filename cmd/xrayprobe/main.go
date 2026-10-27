@@ -304,6 +304,7 @@ func testCommand(manager *core.Manager, args []string) int {
 	probeURL := fs.String("probe-url", "", "HTTPS endpoint used for latency probes")
 	metadataURL := fs.String("metadata-url", "", "HTTPS IP metadata endpoint")
 	noMetadata := fs.Bool("no-metadata", false, "skip outbound IP and location lookup")
+	gemini := fs.Bool("gemini", false, "also load the Gemini web app through the tunnel and report ok/blocked/error")
 	speed := fs.Bool("speed", false, "run an opt-in download speed sample")
 	downloadBytes := fs.Int64("download-size", 10<<20, "bytes to request for --speed")
 	format := fs.String("format", "table", "table, json, or csv")
@@ -329,7 +330,7 @@ func testCommand(manager *core.Manager, args []string) int {
 	var progressMu sync.Mutex
 	runOptions := types.RunOptions{
 		CoreVersion: *coreVersion, OutboundTag: *outbound, Interface: *networkInterface, Concurrency: *concurrency, MaxConfigs: *maxConfigs,
-		Probe: types.ProbeOptions{Attempts: *attempts, Timeout: *timeout, ProbeURL: *probeURL, MetadataURL: *metadataURL, NoMetadata: *noMetadata, Speed: *speed, DownloadBytes: *downloadBytes},
+		Probe: types.ProbeOptions{Attempts: *attempts, Timeout: *timeout, ProbeURL: *probeURL, MetadataURL: *metadataURL, NoMetadata: *noMetadata, Speed: *speed, Gemini: *gemini, DownloadBytes: *downloadBytes},
 		Progress: func(event types.ProgressEvent) {
 			progressMu.Lock()
 			defer progressMu.Unlock()
@@ -527,6 +528,8 @@ Options:
   --no-metadata                 Skip IP/location/ASN lookup
   --probe-url URL               Custom HTTPS health endpoint
   --metadata-url URL            Custom HTTPS metadata endpoint
+  --gemini                      Check whether Gemini (gemini.google.com) is reachable
+                                from the exit IP (ok / blocked / error)
   --speed                       Run an opt-in download sample
   --download-size BYTES         Bytes for --speed (default: 10485760)
 `)

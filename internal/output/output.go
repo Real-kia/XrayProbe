@@ -35,7 +35,17 @@ func Render(w io.Writer, results []types.Result, format string, ranked bool) err
 }
 
 func tableOutput(w io.Writer, results []types.Result) error {
-	headers := []string{"NAME", "PROTO", "IP", "LOCATION", "SUCCESS", "MEDIAN", "JITTER", "SCORE", "GRADE", "STATUS"}
+	headers := []string{"NAME", "PROTO", "IP", "LOCATION", "SUCCESS", "MEDIAN", "JITTER", "SCORE", "GRADE"}
+	showGemini := false
+	for _, result := range results {
+		if result.Gemini != nil {
+			showGemini = true
+		}
+	}
+	if showGemini {
+		headers = append(headers, "GEMINI")
+	}
+	headers = append(headers, "STATUS")
 	rows := make([][]string, 0, len(results))
 	for _, result := range results {
 		ip, location, success, median, jitter := "-", "-", "-", "-", "-"
@@ -54,10 +64,14 @@ func tableOutput(w io.Writer, results []types.Result) error {
 		if result.Error != "" {
 			status += ": " + result.Error
 		}
-		rows = append(rows, []string{
+		row := []string{
 			safe(result.Name), result.Protocol, ip, location, success, median, jitter,
-			fmt.Sprintf("%.1f", result.Score), result.Grade, safe(status),
-		})
+			fmt.Sprintf("%.1f", result.Score), result.Grade,
+		}
+		if showGemini {
+			row = append(row, geminiCell(result.Gemini))
+		}
+		rows = append(rows, append(row, safe(status)))
 	}
 	return writeBoxTable(w, headers, rows)
 }
@@ -156,7 +170,7 @@ func runeWidth(r rune) int {
 
 func csvOutput(w io.Writer, results []types.Result) error {
 	c := csv.NewWriter(w)
-	if err := c.Write([]string{"index", "name", "protocol", "transport", "security", "core_version", "status", "ip", "country", "city", "asn", "success_rate", "median_latency_ms", "jitter_ms", "score", "grade", "error"}); err != nil {
+	if err := c.Write([]string{"index", "name", "protocol", "transport", "security", "core_version", "status", "ip", "country", "city", "asn", "success_rate", "median_latency_ms", "jitter_ms", "score", "grade", "gemini", "gemini_http", "error"}); err != nil {
 		return err
 	}
 	for _, result := range results {
@@ -169,13 +183,30 @@ func csvOutput(w io.Writer, results []types.Result) error {
 			median = fmt.Sprintf("%.2f", result.Metrics.MedianLatencyMS)
 			jitter = fmt.Sprintf("%.2f", result.Metrics.JitterMS)
 		}
-		row := []string{strconv.Itoa(result.Index), result.Name, result.Protocol, result.Transport, result.Security, result.Core, result.Status, ip, country, city, asn, success, median, jitter, fmt.Sprintf("%.2f", result.Score), result.Grade, result.Error}
+		var geminiStatus, geminiHTTP string
+		if result.Gemini != nil {
+			geminiStatus = result.Gemini.Status
+			if result.Gemini.HTTP != 0 {
+				geminiHTTP = strconv.Itoa(result.Gemini.HTTP)
+			}
+		}
+		row := []string{strconv.Itoa(result.Index), result.Name, result.Protocol, result.Transport, result.Security, result.Core, result.Status, ip, country, city, asn, success, median, jitter, fmt.Sprintf("%.2f", result.Score), result.Grade, geminiStatus, geminiHTTP, result.Error}
 		if err := c.Write(row); err != nil {
 			return err
 		}
 	}
 	c.Flush()
 	return c.Error()
+}
+
+func geminiCell(g *types.GeminiInfo) string {
+	if g == nil {
+		return "-"
+	}
+	if g.HTTP != 0 {
+		return fmt.Sprintf("%s (%d)", g.Status, g.HTTP)
+	}
+	return g.Status
 }
 
 func safe(value string) string {

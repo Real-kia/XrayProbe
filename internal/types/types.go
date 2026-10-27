@@ -13,12 +13,15 @@ type Spec struct {
 }
 
 type ProbeOptions struct {
-	Attempts      int
-	Timeout       time.Duration
-	ProbeURL      string
-	MetadataURL   string
-	NoMetadata    bool
-	Speed         bool
+	Attempts    int
+	Timeout     time.Duration
+	ProbeURL    string
+	MetadataURL string
+	NoMetadata  bool
+	Speed       bool
+	// Gemini also loads the Gemini web app through the tunnel and reports
+	// whether Google serves it or challenges the exit IP.
+	Gemini        bool
 	DownloadBytes int64
 	// OnAttempt, if set, is called synchronously after each probe attempt.
 	// CLI-only: never set by the MCP server or remote worker, and excluded
@@ -48,6 +51,7 @@ type Result struct {
 	Status     string        `json:"status"`
 	Outbound   *OutboundInfo `json:"outbound,omitempty"`
 	Metrics    *Metrics      `json:"metrics,omitempty"`
+	Gemini     *GeminiInfo   `json:"gemini,omitempty"`
 	Score      float64       `json:"score,omitempty"`
 	Grade      string        `json:"grade,omitempty"`
 	Error      string        `json:"error,omitempty"`
@@ -61,6 +65,16 @@ type OutboundInfo struct {
 	City        string `json:"city,omitempty"`
 	ASN         string `json:"asn,omitempty"`
 	Org         string `json:"org,omitempty"`
+}
+
+// GeminiInfo is the verdict of loading the Gemini web app through the tunnel:
+// "ok" (HTTP 200), "blocked" (HTTP 429 or a redirect to Google's /sorry/
+// challenge page), or "error" (anything else, including network failures).
+type GeminiInfo struct {
+	Status   string `json:"status"`
+	HTTP     int    `json:"http,omitempty"`
+	FinalURL string `json:"final_url,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 type Metrics struct {

@@ -106,6 +106,9 @@ func runOne(ctx context.Context, binary, version string, spec types.Spec, total 
 			result.Score = probe.Score(metrics)
 			result.Grade = probe.Grade(result.Score)
 		}
+		if options.Probe.Gemini && probeErr == nil {
+			result.Gemini = probe.Gemini(probeCtx, address, options.Probe.Timeout)
+		}
 		return probeErr
 	})
 	result.DurationMS = time.Since(start).Milliseconds()

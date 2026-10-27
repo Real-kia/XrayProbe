@@ -212,6 +212,12 @@ The default health probe performs five HTTPS requests through the selected Xray 
 
 Grades are Excellent (85+), Good (70+), Fair (50+), and Poor. Use `--speed` for an opt-in download sample; speed is not part of the default score.
 
+Use `--gemini` to also check whether the exit IP can open the Gemini web app. After the latency probes, XrayProbe loads `https://gemini.google.com/app` through the tunnel and follows redirects: HTTP 200 is `ok`; HTTP 429 or a redirect to Google's `/sorry/` page is `blocked`; anything else, including a timeout, is `error`. The verdict is reported as a `GEMINI` column (table), `gemini`/`gemini_http` columns (CSV) and a `gemini` object (JSON) and does not change the score or the config's `status`. The MCP tools accept `"gemini": true`.
+
+### Xray-core cache and GitHub rate limits
+
+The first run downloads Xray-core from GitHub and caches it. Passing `--core-version vX.Y.Z` for a version that is already cached needs no network access. Without it ("latest"), XrayProbe asks the GitHub API for the release list each run, which is limited to 60 requests per hour per IP when unauthenticated; if GitHub refuses (for example HTTP 403), "latest" falls back to the newest core already installed. For scripts or timers that run often, pin the version.
+
 ## Useful options
 
 ```text
@@ -226,6 +232,7 @@ Grades are Excellent (85+), Good (70+), Fair (50+), and Poor. Use `--speed` for 
 --no-metadata                 Skip IP/location/ASN lookup
 --probe-url URL               Use a custom HTTPS health endpoint
 --metadata-url URL            Use a custom HTTPS metadata endpoint
+--gemini                      Check Gemini web reachability from the exit IP
 --speed                       Run an opt-in download sample
 ```
 

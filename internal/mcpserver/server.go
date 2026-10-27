@@ -65,6 +65,7 @@ type ConfigInput struct {
 	IncludeMetadata *bool  `json:"include_metadata,omitempty" jsonschema:"whether to look up outbound IP, country, and ASN; default true"`
 	ProbeURL        string `json:"probe_url,omitempty" jsonschema:"optional custom HTTPS health endpoint"`
 	MetadataURL     string `json:"metadata_url,omitempty" jsonschema:"optional custom HTTPS IP metadata endpoint"`
+	Gemini          bool   `json:"gemini,omitempty" jsonschema:"also load the Gemini web app through the tunnel and report ok, blocked (HTTP 429 or /sorry/ challenge), or error"`
 	Speed           bool   `json:"speed,omitempty" jsonschema:"run an opt-in download speed sample"`
 	DownloadBytes   int64  `json:"download_bytes,omitempty" jsonschema:"bytes for the optional speed sample; default 10485760"`
 	Target          string `json:"target,omitempty" jsonschema:"local or a configured remote SSH target; defaults to local"`
@@ -385,7 +386,7 @@ func (s *Server) runOptions(in ConfigInput, concurrency, maxConfigs int) (types.
 	return types.RunOptions{
 		SourceKind: in.SourceType, AllowedRoots: s.allowedRoots, RestrictPaths: true,
 		CoreVersion: in.CoreVersion, OutboundTag: in.OutboundTag, Interface: networkInterface, Concurrency: concurrency, MaxConfigs: maxConfigs,
-		Probe: types.ProbeOptions{Attempts: attempts, Timeout: time.Duration(timeout) * time.Second, ProbeURL: in.ProbeURL, MetadataURL: in.MetadataURL, NoMetadata: !includeMetadata, Speed: in.Speed, DownloadBytes: bytes},
+		Probe: types.ProbeOptions{Attempts: attempts, Timeout: time.Duration(timeout) * time.Second, ProbeURL: in.ProbeURL, MetadataURL: in.MetadataURL, NoMetadata: !includeMetadata, Speed: in.Speed, Gemini: in.Gemini, DownloadBytes: bytes},
 	}, nil
 }
 
